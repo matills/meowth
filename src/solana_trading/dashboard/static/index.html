@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Solana 24/7 Trading — Dashboard</title>
+  <script src="https://unpkg.com/lightweight-charts@4.2.1/dist/lightweight-charts.standalone.production.js"></script>
+  <style>
+    :root {
+      --bg: #0b0f19;
+      --card: #131a2a;
+      --border: #1f2937;
+      --text: #e5e7eb;
+      --muted: #9ca3af;
+      --green: #10b981;
+      --red: #ef4444;
+      --blue: #3b82f6;
+    }
+    * { box-sizing: border-box; font-family: Inter, system-ui, sans-serif; }
+    body { margin: 0; padding: 20px; background: var(--bg); color: var(--text); }
+    header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+    .badge { padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; }
+    .badge.active { background: rgba(16,185,129,0.2); color: var(--green); }
+    .badge.paused { background: rgba(239,68,68,0.2); color: var(--red); }
+    button { background: var(--blue); color: #fff; border: none; border-radius: 6px; padding: 8px 14px; cursor: pointer; font-weight: 600; }
+    button.danger { background: var(--red); }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; margin-bottom: 20px; }
+    .card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
+    .metric-label { font-size: 12px; color: var(--muted); }
+    .metric-val { font-size: 22px; font-weight: 700; margin-top: 6px; }
+    .charts { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px; }
+    @media (max-width: 900px) { .charts { grid-template-columns: 1fr; } }
+    .chart-box { height: 320px; width: 100%; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { text-align: left; padding: 8px; border-bottom: 1px solid var(--border); }
+    th { color: var(--muted); font-weight: 600; }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1 style="margin:0;font-size:20px;">Solana 24/7 Paper Trading</h1>
+      <span id="status-badge" class="badge active">ACTIVO</span>
+    </div>
+    <div style="display:flex;gap:10px;align-items:center;">
+      <select id="mint-select" style="background:#131a2a;color:#e5e7eb;border:1px solid #1f2937;padding:7px;border-radius:6px;"></select>
+      <button id="toggle-pause" class="danger">Pausar (Kill Switch)</button>
+    </div>
+  </header>
+
+  <section class="grid">
+    <div class="card"><div class="metric-label">Trades</div><div class="metric-val" id="m-trades">0</div></div>
+    <div class="card"><div class="metric-label">Rechazos auditados</div><div class="metric-val" id="m-rejections">0</div></div>
+    <div class="card"><div class="metric-label">Gasto LLM hoy (USD)</div><div class="metric-val" id="m-llm">$0.0000</div></div>
+    <div class="card"><div class="metric-label">Último dato</div><div class="metric-val" id="m-last" style="font-size:14px;">—</div></div>
+  </section>
+
+  <section class="charts">
+    <div class="card">
+      <h3 style="margin-top:0;">Curva de Equity (SOL)</h3>
+      <div id="equity-chart" class="chart-box"></div>
+    </div>
+    <div class="card">
+      <h3 style="margin-top:0;">Velas 5m + Entradas/Salidas</h3>
+      <div id="candle-chart" class="chart-box"></div>
+    </div>
+  </section>
+
+  <section class="charts">
+    <div class="card">
+      <h3 style="margin-top:0;">Últimos Trades</h3>
+      <table>
+        <thead><tr><th>Token</th><th>Lado</th><th>Estado</th><th>SOL</th><th>PnL</th><th>Motivo</th></tr></thead>
+        <tbody id="trades-body"></tbody>
+      </table>
+    </div>
+    <div class="card">
+      <h3 style="margin-top:0;">Oportunidades Rechazadas</h3>
+      <table>
+        <thead><tr><th>Etapa</th><th>Token</th><th>Motivo</th></tr></thead>
+        <tbody id="rejections-body"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <script>
+    const chartOpts = { layout: { background: { color: '#131a2a' }, textColor: '#9ca3af' }, grid: { vertLines: { color: '#1f2937' }, horzLines: { color: '#1f2937' } } };
+    const equityChart = LightweightCharts.createChart(document.getElementById('equity-chart'), chartOpts);
+    const equitySeries = equityChart.addAreaSeries({ lineColor: '#3b82f6', topColor: 'rgba(59,130,246,0.35)', bottomColor: 'rgba(59,130,246,0.02)' });
+
+    const candleChart = LightweightCharts.createChart(document.getElementById('candle-chart'), chartOpts);
+    const candleSeries = candleChart.addCandlestickSeries({ upColor: '#10b981', downColor: '#ef4444', borderVisible: false, wickUpColor: '#10b981', wickDownColor: '#ef4444' });
+
+    let isPaused = false;
+    async function refresh() {
+      const [status, equity, trades, rejections] = await Promise.all([
+        fetch('/api/status').then(r => r.json()),
+        fetch('/api/equity').then(r => r.json()),
+        fetch('/api/trades').then(r => r.json()),
+        fetch('/api/rejections').then(r => r.json()),
+      ]);
+
+      isPaused = status.paused;
+      const badge = document.getElementById('status-badge');
+      const btn = document.getElementById('toggle-pause');
+      badge.textContent = isPaused ? 'PAUSADO' : 'ACTIVO';
+      badge.className = 'badge ' + (isPaused ? 'paused' : 'active');
+      btn.textContent = isPaused ? 'Reanudar sistema' : 'Pausar (Kill Switch)';
+      btn.className = isPaused ? '' : 'danger';
+
+      document.getElementById('m-trades').textContent = status.trades_count;
+      document.getElementById('m-rejections').textContent = status.rejections_count;
+      document.getElementById('m-llm').textContent = '$' + status.daily_llm_spend_usd.toFixed(4);
+      document.getElementById('m-last').textContent = status.last_data_ts || '—';
+
+      const sel = document.getElementById('mint-select');
+      if (sel.options.length === 0 && status.approved_mints.length > 0) {
+        status.approved_mints.forEach(m => {
+          const opt = document.createElement('option');
+          opt.value = m; opt.textContent = m.slice(0, 10) + '...';
+          sel.appendChild(opt);
+        });
+      }
+
+      if (equity.length > 0) {
+        equitySeries.setData(equity.map(e => ({ time: Math.floor(new Date(e.ts).getTime() / 1000), value: e.total_equity_sol })));
+      }
+
+      const activeMint = sel.value || (status.approved_mints[0] || '');
+      if (activeMint) {
+        const candles = await fetch(`/api/candles?mint=${encodeURIComponent(activeMint)}&timeframe=5m`).then(r => r.json());
+        if (candles.length > 0) candleSeries.setData(candles);
+      }
+
+      document.getElementById('trades-body').innerHTML = trades.slice(0, 15).map(t =>
+        `<tr><td>${t.mint.slice(0, 8)}</td><td>${t.side}</td><td>${t.status}</td><td>${Number(t.amount_sol).toFixed(3)}</td><td>${t.pnl_sol != null ? Number(t.pnl_sol).toFixed(4) : '—'}</td><td>${t.reason}</td></tr>`
+      ).join('');
+
+      document.getElementById('rejections-body').innerHTML = rejections.slice(0, 15).map(r =>
+        `<tr><td>${r.stage}</td><td>${r.mint.slice(0, 8)}</td><td>${r.reason}</td></tr>`
+      ).join('');
+    }
+
+    document.getElementById('toggle-pause').addEventListener('click', async () => {
+      await fetch(isPaused ? '/api/resume' : '/api/pause', { method: 'POST' });
+      refresh();
+    });
+    document.getElementById('mint-select').addEventListener('change', refresh);
+    refresh();
+    setInterval(refresh, 10000);
+  </script>
+</body>
+</html>
