@@ -112,6 +112,175 @@ class TradingDatabase:
             ).fetchall()
             return [str(r[0]) for r in rows]
 
+    @staticmethod
+    def _as_utc(val: object) -> datetime | None:
+        if val is None:
+            return None
+        if isinstance(val, datetime):
+            return val if val.tzinfo is not None else val.replace(tzinfo=UTC)
+        return datetime.fromisoformat(str(val))
+
+    def get_approved_tokens(self) -> list[TokenCandidate]:
+        with self._lock:
+            rows = self._conn.execute(
+                """
+                SELECT mint, symbol, name, pool_address, dex,
+                       CAST(created_at AS TIMESTAMP),
+                       liquidity_usd, mint_authority_revoked, freeze_authority_revoked,
+                       top_holder_pct, dev_wallet, status,
+                       CAST(first_seen_at AS TIMESTAMP),
+                       CAST(updated_at AS TIMESTAMP)
+                FROM tokens
+                WHERE status = 'approved'
+                ORDER BY updated_at DESC
+                """
+            ).fetchall()
+        return [
+            TokenCandidate(
+                mint=r[0],
+                symbol=r[1],
+                name=r[2] or "",
+                pool_address=r[3] or "",
+                dex=r[4] or "",
+                created_at=self._as_utc(r[5]),
+                liquidity_usd=float(r[6] or 0.0),
+                mint_authority_revoked=bool(r[7]),
+                freeze_authority_revoked=bool(r[8]),
+                top_holder_pct=float(r[9]) if r[9] is not None else None,
+                dev_wallet=r[10],
+                status=r[11],
+                first_seen_at=self._as_utc(r[12]) or datetime.now(UTC),
+                updated_at=self._as_utc(r[13]) or datetime.now(UTC),
+            )
+            for r in rows
+        ]
+
+    def get_recent_candles(
+        self,
+        mint: str,
+        timeframe: str = "5m",
+        limit: int = 200,
+    ) -> list[Candle]:
+        from solana_trading.models import Timeframe
+
+        tf = Timeframe(timeframe)
+        with self._lock:
+            rows = self._conn.execute(
+                """
+                SELECT mint, timeframe, CAST(open_time AS TIMESTAMP),
+                       open, high, low, close, volume_usd, liquidity_usd
+                FROM candles
+                WHERE mint = ? AND timeframe = ?
+                ORDER BY open_time DESC
+                LIMIT ?
+                """,
+                [mint, tf.value, limit],
+            ).fetchall()
+        candles = [
+            Candle(
+                mint=r[0],
+                timeframe=tf,
+                open_time=self._as_utc(r[2]) or datetime.now(UTC),
+                open=float(r[3]),
+                high=float(r[4]),
+                low=float(r[5]),
+                close=float(r[6]),
+                volume_usd=float(r[7] or 0.0),
+                liquidity_usd=float(r[8] or 0.0),
+            )
+            for r in reversed(rows)
+        ]
+        return candles
+
+    def get_recent_trades(self, limit: int = 50) -> list[dict[str, object]]:
+        with self._lock:
+            rows = self._conn.execute(
+                """
+                SELECT trade_id, mode, mint, side, status, strategy_name, reason,
+                       qty_tokens, amount_sol, quoted_price_sol, filled_price_sol,
+                       slippage_bps, fees_sol, pnl_sol, pnl_pct,
+                       CAST(opened_at AS TIMESTAMP), exit_reason
+                FROM trades
+                ORDER BY opened_at DESC
+                LIMIT ?
+                """,
+                [limit],
+            ).fetchall()
+        cols = (
+            "trade_id",
+            "mode",
+            "mint",
+            "side",
+            "status",
+            "strategy_name",
+            "reason",
+            "qty_tokens",
+            "amount_sol",
+            "quoted_price_sol",
+            "filled_price_sol",
+            "slippage_bps",
+            "fees_sol",
+            "pnl_sol",
+            "pnl_pct",
+            "opened_at",
+            "exit_reason",
+        )
+        out: list[dict[str, object]] = []
+        for r in rows:
+            item: dict[str, object] = {}
+            for k, v in zip(cols, r, strict=True):
+                item[k] = self._as_utc(v).isoformat() if isinstance(v, datetime) else v
+            out.append(item)
+        return out
+
+    def get_recent_rejections(self, limit: int = 50) -> list[dict[str, object]]:
+        with self._lock:
+            rows = self._conn.execute(
+                """
+                SELECT rejection_id, CAST(ts AS TIMESTAMP), mint, stage, reason
+                FROM rejections
+                ORDER BY ts DESC
+                LIMIT ?
+                """,
+                [limit],
+            ).fetchall()
+        return [
+            {
+                "rejection_id": r[0],
+                "ts": (self._as_utc(r[1]) or datetime.now(UTC)).isoformat(),
+                "mint": r[2],
+                "stage": r[3],
+                "reason": r[4],
+            }
+            for r in rows
+        ]
+
+    def get_equity_curve(self, limit: int = 500) -> list[dict[str, object]]:
+        with self._lock:
+            rows = self._conn.execute(
+                """
+                SELECT CAST(ts AS TIMESTAMP), mode, cash_sol, positions_value_sol,
+                       total_equity_sol, sol_price_usd, drawdown_pct, open_positions
+                FROM equity_curve
+                ORDER BY ts DESC
+                LIMIT ?
+                """,
+                [limit],
+            ).fetchall()
+        return [
+            {
+                "ts": (self._as_utc(r[0]) or datetime.now(UTC)).isoformat(),
+                "mode": r[1],
+                "cash_sol": float(r[2]),
+                "positions_value_sol": float(r[3]),
+                "total_equity_sol": float(r[4]),
+                "sol_price_usd": float(r[5]),
+                "drawdown_pct": float(r[6]),
+                "open_positions": int(r[7]),
+            }
+            for r in reversed(rows)
+        ]
+
     # --- Ticks & Candles ---
 
     def insert_tick(self, tick: Tick) -> None:
