@@ -21,12 +21,12 @@ build/
 *keypair*.json
 
 # Local data & backups
-data/
-backups/
+/data/
+/backups/
 *.duckdb
 *.duckdb.wal
 *.parquet
-logs/
+/logs/
 
 # OS / IDE
 .DS_Store
