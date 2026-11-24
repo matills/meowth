@@ -105,6 +105,13 @@ class TradingDatabase:
                 ],
             )
 
+    def get_approved_mints(self) -> list[str]:
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT mint FROM tokens WHERE status = 'approved' ORDER BY updated_at DESC"
+            ).fetchall()
+            return [str(r[0]) for r in rows]
+
     # --- Ticks & Candles ---
 
     def insert_tick(self, tick: Tick) -> None:

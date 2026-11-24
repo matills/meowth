@@ -3,11 +3,17 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
 import sys
 
 import structlog
 
+from solana_trading.agents.scout import ScoutAgent
 from solana_trading.config import Settings
+from solana_trading.data.dexscreener import DexScreenerClient
+from solana_trading.data.ingestor import MarketDataIngestor
+from solana_trading.data.jupiter import JupiterQuoteClient
+from solana_trading.data.solana_rpc import OnChainTokenInspector
 from solana_trading.storage.db import TradingDatabase
 
 logger = structlog.get_logger(__name__)
@@ -49,12 +55,51 @@ def cmd_check_config(settings: Settings) -> int:
     return 0
 
 
+def cmd_scout_scan(settings: Settings, mints: list[str] | None = None) -> int:
+    async def _run() -> tuple[int, int]:
+        with TradingDatabase(settings.duckdb_path) as db:
+            db.init_schema()
+            dex = DexScreenerClient(base_url=settings.dexscreener_api_url)
+            target_mints = mints or await dex.fetch_latest_boosted_solana_mints()
+            scout = ScoutAgent(
+                settings=settings,
+                db=db,
+                dexscreener=dex,
+                inspector=OnChainTokenInspector(settings.solana_rpc_url),
+                jupiter=JupiterQuoteClient(base_url=settings.jupiter_api_url),
+            )
+            approved, rejected = await scout.scan_mints(target_mints)
+            return len(approved), len(rejected)
+
+    ok_count, rej_count = asyncio.run(_run())
+    print(f"Scout completado: {ok_count} aprobados, {rej_count} rechazados")
+    return 0
+
+
+def cmd_ingest_once(settings: Settings) -> int:
+    async def _run() -> int:
+        with TradingDatabase(settings.duckdb_path) as db:
+            db.init_schema()
+            ingestor = MarketDataIngestor(
+                db=db,
+                dexscreener=DexScreenerClient(base_url=settings.dexscreener_api_url),
+            )
+            return await ingestor.ingest_mints()
+
+    count = asyncio.run(_run())
+    print(f"Ingesta completada: {count} tokens actualizados (ticks + velas 1m/5m)")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="solana-trading")
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("init-db", help="Initialize the local DuckDB schema")
     sub.add_parser("backup-parquet", help="Export all DuckDB tables to Parquet")
     sub.add_parser("check-config", help="Validate and print current configuration")
+    scout_p = sub.add_parser("scout-scan", help="Discover and filter Solana candidate tokens")
+    scout_p.add_argument("--mints", nargs="*", help="Optional explicit mint addresses to evaluate")
+    sub.add_parser("ingest-once", help="Poll approved tokens into ticks and 1m/5m candles")
 
     args = parser.parse_args(argv)
     settings = Settings()
@@ -65,6 +110,10 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_backup_parquet(settings)
     if args.command == "check-config":
         return cmd_check_config(settings)
+    if args.command == "scout-scan":
+        return cmd_scout_scan(settings, mints=args.mints)
+    if args.command == "ingest-once":
+        return cmd_ingest_once(settings)
     return 1
 
 
