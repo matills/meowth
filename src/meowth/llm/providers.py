@@ -133,8 +133,9 @@ class GeminiLLMClient(LLMClient):
         t0 = time.perf_counter()
         url = (
             f"https://generativelanguage.googleapis.com/v1beta/models/"
-            f"{self.model}:generateContent?key={self._api_key}"
+            f"{self.model}:generateContent"
         )
+        headers = {"x-goog-api-key": self._api_key, "Content-Type": "application/json"}
         payload = {
             "systemInstruction": {"parts": [{"text": system_prompt}]},
             "contents": [{"role": "user", "parts": [{"text": user_prompt}]}],
@@ -146,7 +147,7 @@ class GeminiLLMClient(LLMClient):
 
         client = self._client or httpx.AsyncClient(timeout=30.0)
         try:
-            resp = await client.post(url, json=payload)
+            resp = await client.post(url, headers=headers, json=payload)
             resp.raise_for_status()
             data = resp.json()
         finally:

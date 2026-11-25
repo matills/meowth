@@ -30,7 +30,7 @@ class Settings(BaseSettings):
     solana_ws_url: str = "wss://api.mainnet-beta.solana.com"
 
     # Market data & quotes
-    jupiter_api_url: str = "https://quote-api.jup.ag/v6"
+    jupiter_api_url: str = "https://lite-api.jup.ag/swap/v1"
     dexscreener_api_url: str = "https://api.dexscreener.com"
     birdeye_api_key: SecretStr | None = None
 

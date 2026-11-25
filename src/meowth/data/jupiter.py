@@ -30,7 +30,7 @@ class JupiterQuoteClient:
 
     def __init__(
         self,
-        base_url: str = "https://quote-api.jup.ag/v6",
+        base_url: str = "https://lite-api.jup.ag/swap/v1",
         client: httpx.AsyncClient | None = None,
         timeout_seconds: float = 10.0,
     ) -> None:
