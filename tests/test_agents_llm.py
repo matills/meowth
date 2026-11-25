@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import httpx
 
-from solana_trading.agents.analyst import AnalystAgent
-from solana_trading.agents.supervisor import SupervisorAgent
-from solana_trading.llm.client import BudgetedLLMClient
-from solana_trading.llm.providers import GeminiLLMClient, OpenAICompatibleLLMClient
-from solana_trading.models import TokenCandidate
-from solana_trading.storage.db import TradingDatabase
+from meowth.agents.analyst import AnalystAgent
+from meowth.agents.supervisor import SupervisorAgent
+from meowth.llm.client import BudgetedLLMClient
+from meowth.llm.providers import GeminiLLMClient, OpenAICompatibleLLMClient
+from meowth.models import TokenCandidate
+from meowth.storage.db import TradingDatabase
 
 
 async def test_analyst_approves_or_rejects_via_openai_compatible_client(

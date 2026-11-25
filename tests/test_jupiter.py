@@ -5,7 +5,7 @@ from __future__ import annotations
 import httpx
 import pytest
 
-from solana_trading.data.jupiter import (
+from meowth.data.jupiter import (
     LAMPORTS_PER_SOL,
     WSOL_MINT,
     JupiterQuoteClient,

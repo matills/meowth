@@ -7,8 +7,8 @@ from pathlib import Path
 
 import pytest
 
-from solana_trading.config import Settings
-from solana_trading.storage.db import TradingDatabase
+from meowth.config import Settings
+from meowth.storage.db import TradingDatabase
 
 
 @pytest.fixture

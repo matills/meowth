@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 
-from solana_trading.backtest.engine import BacktestConfig, BacktestEngine
-from solana_trading.backtest.reports import format_metrics_summary
-from solana_trading.models import Candle, Timeframe
-from solana_trading.strategies.implementations import (
+from meowth.backtest.engine import BacktestConfig, BacktestEngine
+from meowth.backtest.reports import format_metrics_summary
+from meowth.models import Candle, Timeframe
+from meowth.strategies.implementations import (
     MeanReversionStrategy,
     MomentumBreakoutStrategy,
     VwapTrendStrategy,

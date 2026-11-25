@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import httpx
 
-from solana_trading.alerts.telegram import TelegramNotifier
-from solana_trading.storage.db import TradingDatabase
+from meowth.alerts.telegram import TelegramNotifier
+from meowth.storage.db import TradingDatabase
 
 
 async def test_telegram_disabled_returns_false() -> None:

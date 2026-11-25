@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from pathlib import Path
 
-from solana_trading.models import (
+from meowth.models import (
     Candle,
     EquitySnapshot,
     LLMCallRecord,
@@ -18,7 +18,7 @@ from solana_trading.models import (
     TokenCandidate,
     TradeRecord,
 )
-from solana_trading.storage.db import TABLES_TO_BACKUP, TradingDatabase
+from meowth.storage.db import TABLES_TO_BACKUP, TradingDatabase
 
 
 def test_schema_creates_all_tables(db: TradingDatabase) -> None:

@@ -7,7 +7,7 @@ services:
     volumes:
       - ./data:/app/data
       - ./backups:/app/backups
-    command: ["solana-trading", "init-db"]
+    command: ["meowth", "init-db"]
     restart: "no"
 
   engine:
@@ -21,10 +21,10 @@ services:
     volumes:
       - ./data:/app/data
       - ./backups:/app/backups
-    command: ["solana-trading", "run-paper", "--interval", "60"]
+    command: ["meowth", "run-paper", "--interval", "60"]
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "solana-trading", "check-config"]
+      test: ["CMD", "meowth", "check-config"]
       interval: 60s
       timeout: 10s
       retries: 3
@@ -42,5 +42,5 @@ services:
       - ./backups:/app/backups
     ports:
       - "8080:8080"
-    command: ["solana-trading", "dashboard", "--host", "0.0.0.0", "--port", "8080"]
+    command: ["meowth", "dashboard", "--host", "0.0.0.0", "--port", "8080"]
     restart: unless-stopped

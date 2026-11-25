@@ -960,6 +960,48 @@ wheels = [
 ]
 
 [[package]]
+name = "meowth"
+version = "0.1.0"
+source = { editable = "." }
+dependencies = [
+    { name = "duckdb" },
+    { name = "httpx" },
+    { name = "pydantic" },
+    { name = "pydantic-settings" },
+    { name = "solana" },
+    { name = "solders" },
+    { name = "structlog" },
+]
+
+[package.optional-dependencies]
+backtest = [
+    { name = "pandas" },
+    { name = "quantstats" },
+]
+dev = [
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
+    { name = "ruff" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "duckdb", specifier = ">=1.1.0,<2.0.0" },
+    { name = "httpx", specifier = ">=0.27.0,<1.0.0" },
+    { name = "pandas", marker = "extra == 'backtest'", specifier = ">=2.2.0,<3.0.0" },
+    { name = "pydantic", specifier = ">=2.9.0,<3.0.0" },
+    { name = "pydantic-settings", specifier = ">=2.6.0,<3.0.0" },
+    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.3.0,<9.0.0" },
+    { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.24.0,<1.0.0" },
+    { name = "quantstats", marker = "extra == 'backtest'", specifier = ">=0.0.62,<1.0.0" },
+    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.7.0,<1.0.0" },
+    { name = "solana", specifier = ">=0.35.0,<1.0.0" },
+    { name = "solders", specifier = ">=0.21.0,<1.0.0" },
+    { name = "structlog", specifier = ">=24.4.0,<26.0.0" },
+]
+provides-extras = ["backtest", "dev"]
+
+[[package]]
 name = "numpy"
 version = "2.5.5"
 source = { registry = "https://pypi.org/simple" }
@@ -1590,48 +1632,6 @@ sdist = { url = "https://files.pythonhosted.org/packages/6c/df/b5a468efae6fdec6d
 wheels = [
     { url = "https://files.pythonhosted.org/packages/a9/df/661788c397a81570f704c334fe3168ce8284e785e2b9fef866fa5631c177/solana-0.42.0-py3-none-any.whl", hash = "sha256:74a9a10d931a37109a14c65ee691c31b0081064f3d824648d6e636908f1885a7", size = 53518, upload-time = "2026-11-11T02:38:27.25Z" },
 ]
-
-[[package]]
-name = "solana-trading"
-version = "0.1.0"
-source = { editable = "." }
-dependencies = [
-    { name = "duckdb" },
-    { name = "httpx" },
-    { name = "pydantic" },
-    { name = "pydantic-settings" },
-    { name = "solana" },
-    { name = "solders" },
-    { name = "structlog" },
-]
-
-[package.optional-dependencies]
-backtest = [
-    { name = "pandas" },
-    { name = "quantstats" },
-]
-dev = [
-    { name = "pytest" },
-    { name = "pytest-asyncio" },
-    { name = "ruff" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "duckdb", specifier = ">=1.1.0,<2.0.0" },
-    { name = "httpx", specifier = ">=0.27.0,<1.0.0" },
-    { name = "pandas", marker = "extra == 'backtest'", specifier = ">=2.2.0,<3.0.0" },
-    { name = "pydantic", specifier = ">=2.9.0,<3.0.0" },
-    { name = "pydantic-settings", specifier = ">=2.6.0,<3.0.0" },
-    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.3.0,<9.0.0" },
-    { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.24.0,<1.0.0" },
-    { name = "quantstats", marker = "extra == 'backtest'", specifier = ">=0.0.62,<1.0.0" },
-    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.7.0,<1.0.0" },
-    { name = "solana", specifier = ">=0.35.0,<1.0.0" },
-    { name = "solders", specifier = ">=0.21.0,<1.0.0" },
-    { name = "structlog", specifier = ">=24.4.0,<26.0.0" },
-]
-provides-extras = ["backtest", "dev"]
 
 [[package]]
 name = "solders"

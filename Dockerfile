@@ -15,4 +15,4 @@ RUN uv pip install --no-cache .
 
 RUN mkdir -p /app/data /app/backups/parquet
 
-CMD ["solana-trading", "check-config"]
+CMD ["meowth", "check-config"]

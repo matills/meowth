@@ -7,11 +7,11 @@ from datetime import UTC, datetime
 import httpx
 import pytest
 
-from solana_trading.data.candles import CandleAggregator, floor_timestamp
-from solana_trading.data.dexscreener import DexScreenerClient
-from solana_trading.data.ingestor import MarketDataIngestor
-from solana_trading.models import Tick, Timeframe, TokenCandidate
-from solana_trading.storage.db import TradingDatabase
+from meowth.data.candles import CandleAggregator, floor_timestamp
+from meowth.data.dexscreener import DexScreenerClient
+from meowth.data.ingestor import MarketDataIngestor
+from meowth.models import Tick, Timeframe, TokenCandidate
+from meowth.storage.db import TradingDatabase
 
 
 def test_floor_timestamp_1m_and_5m() -> None:

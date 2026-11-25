@@ -6,12 +6,12 @@ from datetime import UTC, datetime, timedelta
 
 import httpx
 
-from solana_trading.agents.scout import ScoutAgent
-from solana_trading.config import Settings
-from solana_trading.data.dexscreener import DexPairSnapshot, DexScreenerClient
-from solana_trading.data.jupiter import WSOL_MINT, JupiterQuoteClient
-from solana_trading.data.solana_rpc import OnChainTokenInspector
-from solana_trading.storage.db import TradingDatabase
+from meowth.agents.scout import ScoutAgent
+from meowth.config import Settings
+from meowth.data.dexscreener import DexPairSnapshot, DexScreenerClient
+from meowth.data.jupiter import WSOL_MINT, JupiterQuoteClient
+from meowth.data.solana_rpc import OnChainTokenInspector
+from meowth.storage.db import TradingDatabase
 
 VALID_MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"  # Valid Solana base58 pubkey (USDC)
 

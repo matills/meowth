@@ -7,11 +7,11 @@ import random
 import httpx
 import pytest
 
-from solana_trading.config import Settings
-from solana_trading.data.jupiter import WSOL_MINT, JupiterQuoteClient
-from solana_trading.execution.paper import PaperExecutor
-from solana_trading.models import OrderRequest, Side, TradeStatus
-from solana_trading.storage.db import TradingDatabase
+from meowth.config import Settings
+from meowth.data.jupiter import WSOL_MINT, JupiterQuoteClient
+from meowth.execution.paper import PaperExecutor
+from meowth.models import OrderRequest, Side, TradeStatus
+from meowth.storage.db import TradingDatabase
 
 
 async def test_paper_executor_uses_worse_of_two_quotes_and_tracks_pnl(

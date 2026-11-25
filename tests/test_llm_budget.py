@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import pytest
 
-from solana_trading.llm.client import (
+from meowth.llm.client import (
     BudgetedLLMClient,
     LLMBudgetExceededError,
     LLMClient,
     LLMResponse,
 )
-from solana_trading.storage.db import TradingDatabase
+from meowth.storage.db import TradingDatabase
 
 
 class DummyLLMClient(LLMClient):

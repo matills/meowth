@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 
-from solana_trading.config import Settings
-from solana_trading.models import OrderRequest, Quote, Side, TokenCandidate
-from solana_trading.risk.manager import PortfolioState, RiskManager
+from meowth.config import Settings
+from meowth.models import OrderRequest, Quote, Side, TokenCandidate
+from meowth.risk.manager import PortfolioState, RiskManager
 
 
 def _valid_token(now: datetime) -> TokenCandidate:

@@ -7,20 +7,20 @@ from datetime import UTC, datetime, timedelta
 
 import httpx
 
-from solana_trading.agents.analyst import AnalystAgent
-from solana_trading.agents.scout import ScoutAgent
-from solana_trading.config import Settings
-from solana_trading.dashboard.server import build_dashboard_payload
-from solana_trading.data.dexscreener import DexScreenerClient
-from solana_trading.data.ingestor import MarketDataIngestor
-from solana_trading.data.jupiter import WSOL_MINT, JupiterQuoteClient
-from solana_trading.data.solana_rpc import OnChainTokenInspector
-from solana_trading.engine import TradingEngine
-from solana_trading.execution.paper import PaperExecutor
-from solana_trading.models import Candle, Side, Signal, TokenCandidate
-from solana_trading.risk.manager import RiskManager
-from solana_trading.storage.db import TradingDatabase
-from solana_trading.strategies.base import Strategy
+from meowth.agents.analyst import AnalystAgent
+from meowth.agents.scout import ScoutAgent
+from meowth.config import Settings
+from meowth.dashboard.server import build_dashboard_payload
+from meowth.data.dexscreener import DexScreenerClient
+from meowth.data.ingestor import MarketDataIngestor
+from meowth.data.jupiter import WSOL_MINT, JupiterQuoteClient
+from meowth.data.solana_rpc import OnChainTokenInspector
+from meowth.engine import TradingEngine
+from meowth.execution.paper import PaperExecutor
+from meowth.models import Candle, Side, Signal, TokenCandidate
+from meowth.risk.manager import RiskManager
+from meowth.storage.db import TradingDatabase
+from meowth.strategies.base import Strategy
 
 
 class AlwaysBuyStrategy(Strategy):
