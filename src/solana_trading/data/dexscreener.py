@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 
 import httpx
 
-ALLOWED_DEXS = frozenset({"raydium", "orca", "meteora"})
+ALLOWED_DEXS = frozenset({"raydium", "orca", "meteora", "pumpswap"})
 
 
 @dataclass(slots=True)

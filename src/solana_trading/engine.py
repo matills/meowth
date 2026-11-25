@@ -282,13 +282,27 @@ class TradingEngine:
         )
         return summary
 
-    async def run_forever(self, interval_seconds: int = 60) -> None:
+    async def run_forever(
+        self,
+        interval_seconds: int = 60,
+        *,
+        scout_every_n_cycles: int = 10,
+        seed_mints: list[str] | None = None,
+    ) -> None:
         logger.info("trading_engine_started", mode=self.settings.trading_mode.value)
+        cycle_idx = 0
         while True:
             try:
-                summary = await self.run_cycle()
+                discover: list[str] | None = None
+                if scout_every_n_cycles > 0 and cycle_idx % scout_every_n_cycles == 0:
+                    boosted = await self.scout.dexscreener.fetch_latest_boosted_solana_mints()
+                    combined = list(dict.fromkeys((seed_mints or []) + boosted))
+                    discover = combined
+
+                summary = await self.run_cycle(discover_mints=discover)
                 logger.info(
                     "engine_cycle_completed",
+                    cycle=cycle_idx,
                     ingested=summary.ingested_tokens,
                     signals=summary.signals_generated,
                     trades=summary.trades_executed,
@@ -297,4 +311,5 @@ class TradingEngine:
                 )
             except Exception as exc:  # pragma: no cover
                 logger.exception("engine_cycle_error", error=str(exc))
+            cycle_idx += 1
             await asyncio.sleep(interval_seconds)
