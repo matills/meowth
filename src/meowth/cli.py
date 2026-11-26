@@ -14,6 +14,8 @@ from meowth.agents.analyst import AnalystAgent
 from meowth.agents.scout import ScoutAgent
 from meowth.agents.supervisor import SupervisorAgent
 from meowth.alerts.telegram import TelegramNotifier
+from meowth.backtest.engine import BacktestConfig, BacktestEngine
+from meowth.backtest.reports import format_metrics_summary
 from meowth.config import Settings
 from meowth.dashboard.server import create_dashboard_server
 from meowth.data.dexscreener import DexScreenerClient
@@ -22,11 +24,21 @@ from meowth.data.jupiter import LAMPORTS_PER_SOL, WSOL_MINT, JupiterQuoteClient
 from meowth.data.solana_rpc import OnChainTokenInspector
 from meowth.data.watchlist import ESTABLISHED_SOLANA_MINTS, USDC_MINT
 from meowth.engine import TradingEngine
+from meowth.execution.multi_asset_paper import MultiAssetPaperExecutor
 from meowth.execution.paper import PaperExecutor
 from meowth.llm.providers import build_llm_client
+from meowth.markets.base import MarketDataProvider
+from meowth.markets.binance import DEFAULT_CRYPTO_SYMBOLS, BinanceMarketProvider
+from meowth.markets.stocks import DEFAULT_EQUITY_SYMBOLS, YahooEquityProvider
+from meowth.models import Timeframe
+from meowth.multi_engine import MultiAssetEngine
 from meowth.risk.manager import RiskManager
 from meowth.storage.db import TradingDatabase
-from meowth.strategies.implementations import MomentumBreakoutStrategy
+from meowth.strategies.implementations import (
+    MeanReversionStrategy,
+    MomentumBreakoutStrategy,
+    VwapTrendStrategy,
+)
 
 logger = structlog.get_logger(__name__)
 
@@ -246,6 +258,83 @@ def cmd_dashboard(settings: Settings, host: str = "0.0.0.0", port: int = 8080) -
     return 0
 
 
+def cmd_run_multi(
+    settings: Settings,
+    markets: str = "crypto,stocks",
+    interval: int = 60,
+    capital_usd: float = 10_000.0,
+    dashboard_port: int | None = 8080,
+    dashboard_host: str = "127.0.0.1",
+) -> int:
+    selected = {m.strip().lower() for m in markets.split(",") if m.strip()}
+    providers: dict[MarketDataProvider, list[str]] = {}
+    if "crypto" in selected:
+        providers[BinanceMarketProvider()] = DEFAULT_CRYPTO_SYMBOLS
+    if "stocks" in selected:
+        providers[YahooEquityProvider()] = DEFAULT_EQUITY_SYMBOLS
+    if not providers:
+        print("Error: especifica al menos un mercado (--markets crypto,stocks)")
+        return 1
+
+    async def _run() -> None:
+        with TradingDatabase(settings.duckdb_path) as db:
+            db.init_schema()
+            server = None
+            if dashboard_port:
+                server = create_dashboard_server(db, host=dashboard_host, port=dashboard_port)
+                t = threading.Thread(target=server.serve_forever, daemon=True)
+                t.start()
+                print(f"Dashboard activo en http://{dashboard_host}:{dashboard_port}")
+
+            engine = MultiAssetEngine(
+                settings=settings,
+                db=db,
+                providers=providers,
+                strategy=MomentumBreakoutStrategy(),
+                risk=RiskManager(settings),
+                executor=MultiAssetPaperExecutor(db=db, initial_capital_usd=capital_usd),
+                notifier=TelegramNotifier.from_settings(settings),
+            )
+            try:
+                await engine.run_forever(interval_seconds=interval)
+            finally:
+                if server is not None:
+                    server.shutdown()
+
+    try:
+        asyncio.run(_run())
+    except KeyboardInterrupt:
+        print("\nMotor multi-activo detenido por el usuario.")
+    return 0
+
+
+def cmd_backtest_symbol(symbol: str, market: str = "crypto", limit: int = 300) -> int:
+    async def _run() -> None:
+        provider: MarketDataProvider = (
+            BinanceMarketProvider() if market == "crypto" else YahooEquityProvider()
+        )
+        candles = await provider.fetch_candles(symbol, timeframe=Timeframe.M5, limit=limit)
+        if not candles:
+            print(f"Sin velas para {symbol} en {market}")
+            return
+        print(f"Descargadas {len(candles)} velas 5m de {symbol.upper()} ({provider.source_name})\n")
+        bt = BacktestEngine(
+            BacktestConfig(
+                initial_capital_sol=10_000.0,
+                pool_fee_bps=10.0 if market == "crypto" else 0.0,
+                slippage_bps=10.0,
+                network_fee_sol=0.0,
+            )
+        )
+        for strat in (MomentumBreakoutStrategy(), MeanReversionStrategy(), VwapTrendStrategy()):
+            res = bt.run(strat, symbol.upper(), candles)
+            print(format_metrics_summary(res))
+            print("-" * 60)
+
+    asyncio.run(_run())
+    return 0
+
+
 def cmd_supervisor_review(settings: Settings) -> int:
     async def _run() -> str:
         with TradingDatabase(settings.duckdb_path) as db:
@@ -277,6 +366,25 @@ def main(argv: list[str] | None = None) -> int:
         help="Port for embedded Lightweight Charts dashboard (0 to disable)",
     )
     run_p.add_argument("--dashboard-host", default="127.0.0.1")
+    multi_p = sub.add_parser(
+        "run-multi",
+        help="Run 24/7 paper engine across high-liquidity crypto (Binance) and US stocks",
+    )
+    multi_p.add_argument(
+        "--markets", default="crypto,stocks", help="Comma-separated: crypto,stocks"
+    )
+    multi_p.add_argument("--interval", type=int, default=60)
+    multi_p.add_argument("--capital-usd", type=float, default=10_000.0)
+    multi_p.add_argument("--dashboard-port", type=int, default=8080)
+    multi_p.add_argument("--dashboard-host", default="127.0.0.1")
+
+    bt_p = sub.add_parser(
+        "backtest-symbol", help="Backtest 3 strategies on live Binance/Yahoo bars"
+    )
+    bt_p.add_argument("symbol", help="Symbol e.g. BTCUSDT, ETHUSDT, NVDA, SPY")
+    bt_p.add_argument("--market", choices=["crypto", "stocks"], default="crypto")
+    bt_p.add_argument("--limit", type=int, default=300)
+
     dash_p = sub.add_parser("dashboard", help="Serve the Lightweight Charts web dashboard")
     dash_p.add_argument("--host", default="0.0.0.0")
     dash_p.add_argument("--port", type=int, default=8080)
@@ -305,6 +413,18 @@ def main(argv: list[str] | None = None) -> int:
             dashboard_port=port,
             dashboard_host=args.dashboard_host,
         )
+    if args.command == "run-multi":
+        port = args.dashboard_port if args.dashboard_port > 0 else None
+        return cmd_run_multi(
+            settings,
+            markets=args.markets,
+            interval=args.interval,
+            capital_usd=args.capital_usd,
+            dashboard_port=port,
+            dashboard_host=args.dashboard_host,
+        )
+    if args.command == "backtest-symbol":
+        return cmd_backtest_symbol(args.symbol, market=args.market, limit=args.limit)
     if args.command == "dashboard":
         return cmd_dashboard(settings, host=args.host, port=args.port)
     if args.command == "supervisor-review":
