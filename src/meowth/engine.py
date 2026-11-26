@@ -117,16 +117,19 @@ class TradingEngine:
         current = now or datetime.now(UTC)
         summary = CycleSummary()
 
-        # 1. Optional Scout discovery pass
+        # 1. Optional Scout discovery pass (only scan mints not already approved)
         if discover_mints:
-            approved, rejected = await self.scout.scan_mints(discover_mints, now=current)
-            summary.rejections_logged += len(rejected)
-            for token in approved:
-                assessment = await self.analyst.evaluate_candidate(token)
-                if not assessment.approved:
-                    token.status = "rejected_analyst"
-                    self.db.upsert_token(token)
-                    summary.rejections_logged += 1
+            already_approved = set(self.db.get_approved_mints())
+            new_mints = [m for m in discover_mints if m not in already_approved]
+            if new_mints:
+                approved, rejected = await self.scout.scan_mints(new_mints, now=current)
+                summary.rejections_logged += len(rejected)
+                for token in approved:
+                    assessment = await self.analyst.evaluate_candidate(token)
+                    if not assessment.approved:
+                        token.status = "rejected_analyst"
+                        self.db.upsert_token(token)
+                        summary.rejections_logged += 1
 
         # 2. Ingest latest ticks & 1m/5m candles for approved tokens
         approved_tokens = self.db.get_approved_tokens()
@@ -174,6 +177,7 @@ class TradingEngine:
                     exit_reason = sig.reason
 
             if exit_reason is not None:
+                tok_dec = token_by_mint[mint].decimals if mint in token_by_mint else 6
                 rec = await self.executor.execute_order(
                     OrderRequest(
                         signal_id="exit",
@@ -182,7 +186,8 @@ class TradingEngine:
                         amount_sol=0.0,
                         strategy_name=meta.strategy_name,
                         reason=exit_reason,
-                    )
+                    ),
+                    token_decimals=tok_dec,
                 )
                 summary.trades_executed += 1
                 if rec.status in (TradeStatus.CLOSED, TradeStatus.TRAPPED):
@@ -213,11 +218,13 @@ class TradingEngine:
             portfolio = self._portfolio_state(pos_val)
             desired_sol = portfolio.total_equity_sol * self.settings.risk_max_position_pct
 
+            tok_dec = token_by_mint[mint].decimals
             try:
                 quote = await self.executor.get_quote(
                     WSOL_MINT,
                     mint,
                     max(1, int(desired_sol * LAMPORTS_PER_SOL)),
+                    output_decimals=tok_dec,
                 )
                 self._consecutive_rpc_errors = 0
             except JupiterQuoteError as exc:
@@ -243,7 +250,7 @@ class TradingEngine:
                 continue
 
             order.amount_sol = decision.approved_amount_sol
-            rec = await self.executor.execute_order(order)
+            rec = await self.executor.execute_order(order, token_decimals=tok_dec)
             summary.trades_executed += 1
             if rec.status == TradeStatus.OPEN:
                 self._open_meta[mint] = OpenPositionMeta(

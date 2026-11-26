@@ -90,6 +90,23 @@ async def test_analyst_falls_back_to_rules_when_budget_exceeded(db: TradingDatab
     assert res.used_llm is False
 
 
+async def test_analyst_falls_back_on_transient_503_error(db: TradingDatabase) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(503, text="Service Unavailable")
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http_client:
+        raw = GeminiLLMClient(model="gemini-3.5-flash-lite", api_key="k", client=http_client)
+        budgeted = BudgetedLLMClient(raw, db=db, daily_budget_usd=1.0)
+        analyst = AnalystAgent(db=db, llm=budgeted)
+
+        res = await analyst.evaluate_candidate(
+            TokenCandidate(mint="Mint503", symbol="ERR", liquidity_usd=100_000.0)
+        )
+
+    assert res.approved is True
+    assert res.used_llm is False
+
+
 async def test_supervisor_generates_review_without_mutating_config(db: TradingDatabase) -> None:
     sup = SupervisorAgent(db=db, llm=None)
     report = await sup.generate_review()

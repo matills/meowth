@@ -53,6 +53,7 @@ class TokenCandidate(BaseModel):
     mint: str
     symbol: str
     name: str = ""
+    decimals: int = 6
     pool_address: str = ""
     dex: str = ""
     created_at: datetime | None = None

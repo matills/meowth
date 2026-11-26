@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import time
 
@@ -10,6 +11,35 @@ import httpx
 from meowth.config import Settings
 from meowth.llm.client import BudgetedLLMClient, LLMClient, LLMResponse
 from meowth.storage.db import TradingDatabase
+
+RETRYABLE_STATUS_CODES = frozenset({429, 500, 502, 503, 504})
+
+
+async def _post_with_retry(
+    client: httpx.AsyncClient,
+    url: str,
+    *,
+    headers: dict[str, str] | None = None,
+    json_payload: dict,
+    max_retries: int = 2,
+) -> httpx.Response:
+    last_exc: Exception | None = None
+    for attempt in range(max_retries + 1):
+        try:
+            resp = await client.post(url, headers=headers, json=json_payload)
+            if resp.status_code in RETRYABLE_STATUS_CODES and attempt < max_retries:
+                await asyncio.sleep(1.0 * (2**attempt))
+                continue
+            resp.raise_for_status()
+            return resp
+        except httpx.HTTPError as exc:
+            last_exc = exc
+            if attempt < max_retries:
+                await asyncio.sleep(1.0 * (2**attempt))
+                continue
+            raise
+    assert last_exc is not None
+    raise last_exc
 
 PROVIDER_BASE_URLS: dict[str, str] = {
     "grok": "https://api.x.ai/v1",
@@ -75,12 +105,12 @@ class OpenAICompatibleLLMClient(LLMClient):
 
         client = self._client or httpx.AsyncClient(timeout=30.0)
         try:
-            resp = await client.post(
+            resp = await _post_with_retry(
+                client,
                 f"{self.base_url}/chat/completions",
                 headers=headers,
-                json=payload,
+                json_payload=payload,
             )
-            resp.raise_for_status()
             data = resp.json()
         finally:
             if self._owns_client:
@@ -147,8 +177,12 @@ class GeminiLLMClient(LLMClient):
 
         client = self._client or httpx.AsyncClient(timeout=30.0)
         try:
-            resp = await client.post(url, headers=headers, json=payload)
-            resp.raise_for_status()
+            resp = await _post_with_retry(
+                client,
+                url,
+                headers=headers,
+                json_payload=payload,
+            )
             data = resp.json()
         finally:
             if self._owns_client:

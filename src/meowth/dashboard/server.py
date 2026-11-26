@@ -19,12 +19,14 @@ def build_dashboard_payload(
     query: dict[str, list[str]],
 ) -> tuple[int, dict | list]:
     if path == "/api/status":
+        approved = db.get_approved_tokens()
         return HTTPStatus.OK, {
             "paused": db.get_state("manual_pause", "false") == "true",
             "trades_count": db.count_rows("trades"),
             "rejections_count": db.count_rows("rejections"),
             "daily_llm_spend_usd": db.get_daily_llm_spend_usd(),
-            "approved_mints": db.get_approved_mints(),
+            "approved_mints": [t.mint for t in approved],
+            "approved_tokens": [{"mint": t.mint, "symbol": t.symbol} for t in approved],
             "last_data_ts": db.get_state("last_data_ts"),
         }
     if path == "/api/equity":

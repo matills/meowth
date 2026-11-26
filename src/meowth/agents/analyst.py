@@ -5,9 +5,14 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 
+import httpx
+import structlog
+
 from meowth.llm.client import BudgetedLLMClient, LLMBudgetExceededError
 from meowth.models import PipelineStage, Rejection, TokenCandidate
 from meowth.storage.db import TradingDatabase
+
+logger = structlog.get_logger(__name__)
 
 ANALYST_SYSTEM_PROMPT = (
     "Eres un analista cuantitativo de riesgo de tokens en Solana. "
@@ -79,6 +84,15 @@ class AnalystAgent:
                 score=7,
                 rug_risk="unknown",
                 rationale="Tope diario de LLM alcanzado: continuando sin filtro IA.",
+                used_llm=False,
+            )
+        except (httpx.HTTPError, ValueError, KeyError) as exc:
+            logger.warning("analyst_llm_transient_error", mint=token.mint, error=str(exc))
+            return AnalystAssessment(
+                approved=True,
+                score=7,
+                rug_risk="unknown",
+                rationale="Error temporal de LLM: continuando con reglas deterministas.",
                 used_llm=False,
             )
 

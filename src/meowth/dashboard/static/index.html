@@ -89,7 +89,14 @@
     const equitySeries = equityChart.addAreaSeries({ lineColor: '#3b82f6', topColor: 'rgba(59,130,246,0.35)', bottomColor: 'rgba(59,130,246,0.02)' });
 
     const candleChart = LightweightCharts.createChart(document.getElementById('candle-chart'), chartOpts);
-    const candleSeries = candleChart.addCandlestickSeries({ upColor: '#10b981', downColor: '#ef4444', borderVisible: false, wickUpColor: '#10b981', wickDownColor: '#ef4444' });
+    const candleSeries = candleChart.addCandlestickSeries({
+      upColor: '#10b981',
+      downColor: '#ef4444',
+      borderVisible: false,
+      wickUpColor: '#10b981',
+      wickDownColor: '#ef4444',
+      priceFormat: { type: 'price', precision: 8, minMove: 0.00000001 },
+    });
 
     let isPaused = false;
     async function refresh() {
@@ -114,12 +121,17 @@
       document.getElementById('m-last').textContent = status.last_data_ts || '—';
 
       const sel = document.getElementById('mint-select');
-      if (sel.options.length === 0 && status.approved_mints.length > 0) {
-        status.approved_mints.forEach(m => {
+      const tokens = status.approved_tokens || status.approved_mints.map(m => ({ mint: m, symbol: m.slice(0, 8) }));
+      if (sel.options.length !== tokens.length && tokens.length > 0) {
+        const prev = sel.value;
+        sel.innerHTML = '';
+        tokens.forEach(t => {
           const opt = document.createElement('option');
-          opt.value = m; opt.textContent = m.slice(0, 10) + '...';
+          opt.value = t.mint;
+          opt.textContent = `${t.symbol} (${t.mint.slice(0, 6)}...)`;
           sel.appendChild(opt);
         });
+        if (prev) sel.value = prev;
       }
 
       if (equity.length > 0) {
@@ -129,7 +141,24 @@
       const activeMint = sel.value || (status.approved_mints[0] || '');
       if (activeMint) {
         const candles = await fetch(`/api/candles?mint=${encodeURIComponent(activeMint)}&timeframe=5m`).then(r => r.json());
-        if (candles.length > 0) candleSeries.setData(candles);
+        if (candles.length > 0) {
+          const maxPrice = Math.max(...candles.map(c => c.high));
+          const prec = maxPrice < 0.0001 ? 9 : maxPrice < 0.01 ? 7 : maxPrice < 1 ? 5 : 3;
+          candleSeries.applyOptions({ priceFormat: { type: 'price', precision: prec, minMove: Math.pow(10, -prec) } });
+          candleSeries.setData(candles);
+
+          const markers = trades
+            .filter(t => t.mint === activeMint && t.opened_at)
+            .map(t => ({
+              time: Math.floor(new Date(t.opened_at).getTime() / 1000),
+              position: t.side === 'BUY' ? 'belowBar' : 'aboveBar',
+              color: t.side === 'BUY' ? '#10b981' : '#ef4444',
+              shape: t.side === 'BUY' ? 'arrowUp' : 'arrowDown',
+              text: t.side,
+            }))
+            .sort((a, b) => a.time - b.time);
+          candleSeries.setMarkers(markers);
+        }
       }
 
       document.getElementById('trades-body').innerHTML = trades.slice(0, 15).map(t =>

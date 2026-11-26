@@ -51,6 +51,10 @@ class TradingDatabase:
         sql = SCHEMA_PATH.read_text(encoding="utf-8")
         with self._lock:
             self._conn.execute(sql)
+            # Safe migration for databases created before decimals column existed
+            self._conn.execute(
+                "ALTER TABLE tokens ADD COLUMN IF NOT EXISTS decimals INTEGER DEFAULT 6"
+            )
 
     def close(self) -> None:
         with self._lock:
@@ -69,13 +73,14 @@ class TradingDatabase:
             self._conn.execute(
                 """
                 INSERT INTO tokens (
-                    mint, symbol, name, pool_address, dex, created_at,
+                    mint, symbol, name, decimals, pool_address, dex, created_at,
                     liquidity_usd, mint_authority_revoked, freeze_authority_revoked,
                     top_holder_pct, dev_wallet, status, first_seen_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT (mint) DO UPDATE SET
                     symbol = excluded.symbol,
                     name = excluded.name,
+                    decimals = excluded.decimals,
                     pool_address = excluded.pool_address,
                     dex = excluded.dex,
                     created_at = COALESCE(tokens.created_at, excluded.created_at),
@@ -91,6 +96,7 @@ class TradingDatabase:
                     token.mint,
                     token.symbol,
                     token.name,
+                    token.decimals,
                     token.pool_address,
                     token.dex,
                     token.created_at,
@@ -124,7 +130,7 @@ class TradingDatabase:
         with self._lock:
             rows = self._conn.execute(
                 """
-                SELECT mint, symbol, name, pool_address, dex,
+                SELECT mint, symbol, name, COALESCE(decimals, 6), pool_address, dex,
                        CAST(created_at AS TIMESTAMP),
                        liquidity_usd, mint_authority_revoked, freeze_authority_revoked,
                        top_holder_pct, dev_wallet, status,
@@ -140,17 +146,18 @@ class TradingDatabase:
                 mint=r[0],
                 symbol=r[1],
                 name=r[2] or "",
-                pool_address=r[3] or "",
-                dex=r[4] or "",
-                created_at=self._as_utc(r[5]),
-                liquidity_usd=float(r[6] or 0.0),
-                mint_authority_revoked=bool(r[7]),
-                freeze_authority_revoked=bool(r[8]),
-                top_holder_pct=float(r[9]) if r[9] is not None else None,
-                dev_wallet=r[10],
-                status=r[11],
-                first_seen_at=self._as_utc(r[12]) or datetime.now(UTC),
-                updated_at=self._as_utc(r[13]) or datetime.now(UTC),
+                decimals=int(r[3]),
+                pool_address=r[4] or "",
+                dex=r[5] or "",
+                created_at=self._as_utc(r[6]),
+                liquidity_usd=float(r[7] or 0.0),
+                mint_authority_revoked=bool(r[8]),
+                freeze_authority_revoked=bool(r[9]),
+                top_holder_pct=float(r[10]) if r[10] is not None else None,
+                dev_wallet=r[11],
+                status=r[12],
+                first_seen_at=self._as_utc(r[13]) or datetime.now(UTC),
+                updated_at=self._as_utc(r[14]) or datetime.now(UTC),
             )
             for r in rows
         ]

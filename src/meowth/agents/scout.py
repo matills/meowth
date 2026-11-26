@@ -143,6 +143,7 @@ class ScoutAgent:
             mint=pair.mint,
             symbol=pair.symbol,
             name=pair.name,
+            decimals=security.decimals,
             pool_address=pair.pool_address,
             dex=pair.dex,
             created_at=pair.created_at,

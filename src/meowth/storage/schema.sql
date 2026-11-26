@@ -5,6 +5,7 @@ CREATE TABLE IF NOT EXISTS tokens (
     mint VARCHAR PRIMARY KEY,
     symbol VARCHAR NOT NULL,
     name VARCHAR DEFAULT '',
+    decimals INTEGER DEFAULT 6,
     pool_address VARCHAR DEFAULT '',
     dex VARCHAR DEFAULT '',
     created_at TIMESTAMPTZ,
