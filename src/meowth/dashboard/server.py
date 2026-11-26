@@ -28,6 +28,8 @@ def build_dashboard_payload(
         latest_eq = equity[-1] if equity else None
         return HTTPStatus.OK, {
             "paused": db.get_state("manual_pause", "false") == "true",
+            "currency": db.get_state("currency", "SOL"),
+            "market_label": db.get_state("market_label", "SOLANA"),
             "trades_count": db.count_rows("trades"),
             "wins": wins,
             "losses": losses,

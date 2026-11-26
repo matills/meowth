@@ -53,7 +53,8 @@ class MultiAssetEngine:
         settings: Settings,
         db: TradingDatabase,
         providers: dict[MarketDataProvider, list[str]],
-        strategy: Strategy,
+        strategy: Strategy | None = None,
+        strategies: list[Strategy] | None = None,
         risk: RiskManager,
         executor: MultiAssetPaperExecutor,
         notifier: TelegramNotifier | None = None,
@@ -62,7 +63,12 @@ class MultiAssetEngine:
         self.settings = settings
         self.db = db
         self.providers = providers
-        self.strategy = strategy
+        if strategies is not None:
+            self.strategies = list(strategies)
+        elif strategy is not None:
+            self.strategies = [strategy]
+        else:
+            raise ValueError("Must provide strategy or strategies")
         self.risk = risk
         self.executor = executor
         self.notifier = notifier
@@ -71,6 +77,8 @@ class MultiAssetEngine:
         self._peak_equity_usd = executor.cash_usd
         self._daily_pnl_usd = 0.0
         self._open_pos: dict[str, _OpenPos] = {}
+        self.db.set_state("currency", "USD")
+        self.db.set_state("market_label", "CRYPTO + STOCKS")
 
     async def _notify(self, text: str) -> None:
         if self.notifier is not None and self.notifier.enabled:
@@ -154,11 +162,15 @@ class MultiAssetEngine:
                 candles = self.db.get_recent_candles(
                     symbol, timeframe=self.timeframe.value, limit=100
                 )
-                sig = self.strategy.evaluate(symbol, candles, has_open_position=True)
-                if sig is not None and sig.side == Side.SELL:
-                    self.db.insert_signal(sig)
-                    summary.signals_generated += 1
-                    exit_reason = sig.reason
+                for strat in self.strategies:
+                    if strat.name != pos.strategy_name:
+                        continue
+                    sig = strat.evaluate(symbol, candles, has_open_position=True)
+                    if sig is not None and sig.side == Side.SELL:
+                        self.db.insert_signal(sig)
+                        summary.signals_generated += 1
+                        exit_reason = sig.reason
+                        break
 
             if exit_reason is not None:
                 rec = self.executor.execute_sell(
@@ -176,13 +188,18 @@ class MultiAssetEngine:
                         f"PnL: ${(rec.pnl_sol or 0.0):+.2f}"
                     )
 
-        # 3. Evaluate BUY signals across all updated symbols
+        # 3. Evaluate BUY signals across all updated symbols and configured strategies
         for symbol, quote in latest_quotes.items():
             if symbol in self._open_pos:
                 continue
             candles = self.db.get_recent_candles(symbol, timeframe=self.timeframe.value, limit=100)
-            sig = self.strategy.evaluate(symbol, candles, has_open_position=False)
-            if sig is None or sig.side != Side.BUY:
+            sig = None
+            for strat in self.strategies:
+                candidate_sig = strat.evaluate(symbol, candles, has_open_position=False)
+                if candidate_sig is not None and candidate_sig.side == Side.BUY:
+                    sig = candidate_sig
+                    break
+            if sig is None:
                 continue
 
             self.db.insert_signal(sig)

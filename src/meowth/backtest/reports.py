@@ -7,7 +7,7 @@ from pathlib import Path
 from meowth.backtest.engine import BacktestResult
 
 
-def format_metrics_summary(result: BacktestResult) -> str:
+def format_metrics_summary(result: BacktestResult, *, currency: str = "SOL") -> str:
     m = result.metrics
     gate_label = "APROBADO" if m.passes_gate_a else "NO APROBADO"
     pf_str = f"{m.profit_factor:.2f}" if m.profit_factor != float("inf") else "inf"
@@ -16,8 +16,9 @@ def format_metrics_summary(result: BacktestResult) -> str:
         f"Trades: {m.total_trades} | Win rate: {m.win_rate:.1%}\n"
         f"Retorno neto: {m.net_return_pct:+.2%} | Profit factor: {pf_str}\n"
         f"Max drawdown: {m.max_drawdown_pct:.2%} | Sharpe anualizado: {m.sharpe_annualized:.2f}\n"
-        f"Ganancia sin top 5% trades: {m.profit_without_top_5_pct:+.4f} SOL\n"
-        f"Fees totales: {m.total_fees_sol:.4f} SOL | Equity final: {m.final_equity_sol:.4f} SOL\n"
+        f"Ganancia sin top 5% trades: {m.profit_without_top_5_pct:+.4f} {currency}\n"
+        f"Fees totales: {m.total_fees_sol:.4f} {currency} | "
+        f"Equity final: {m.final_equity_sol:.4f} {currency}\n"
         f"Gate A (backtest neto positivo con costos): {gate_label}"
     )
 

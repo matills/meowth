@@ -258,11 +258,27 @@ def cmd_dashboard(settings: Settings, host: str = "0.0.0.0", port: int = 8080) -
     return 0
 
 
+def _build_strategies(choice: str) -> list:
+    mapping = {
+        "momentum": [MomentumBreakoutStrategy()],
+        "rsi": [MeanReversionStrategy()],
+        "vwap": [VwapTrendStrategy()],
+        "all": [
+            MomentumBreakoutStrategy(),
+            MeanReversionStrategy(),
+            VwapTrendStrategy(),
+        ],
+    }
+    return mapping[choice]
+
+
 def cmd_run_multi(
     settings: Settings,
     markets: str = "crypto,stocks",
+    strategy_choice: str = "all",
     interval: int = 60,
     capital_usd: float = 10_000.0,
+    db_path: str = "data/meowth_multi.duckdb",
     dashboard_port: int | None = 8080,
     dashboard_host: str = "127.0.0.1",
 ) -> int:
@@ -277,20 +293,22 @@ def cmd_run_multi(
         return 1
 
     async def _run() -> None:
-        with TradingDatabase(settings.duckdb_path) as db:
+        with TradingDatabase(db_path) as db:
             db.init_schema()
             server = None
             if dashboard_port:
                 server = create_dashboard_server(db, host=dashboard_host, port=dashboard_port)
                 t = threading.Thread(target=server.serve_forever, daemon=True)
                 t.start()
-                print(f"Dashboard activo en http://{dashboard_host}:{dashboard_port}")
+                print(
+                    f"Dashboard activo en http://{dashboard_host}:{dashboard_port} (DB: {db_path})"
+                )
 
             engine = MultiAssetEngine(
                 settings=settings,
                 db=db,
                 providers=providers,
-                strategy=MomentumBreakoutStrategy(),
+                strategies=_build_strategies(strategy_choice),
                 risk=RiskManager(settings),
                 executor=MultiAssetPaperExecutor(db=db, initial_capital_usd=capital_usd),
                 notifier=TelegramNotifier.from_settings(settings),
@@ -328,10 +346,54 @@ def cmd_backtest_symbol(symbol: str, market: str = "crypto", limit: int = 300) -
         )
         for strat in (MomentumBreakoutStrategy(), MeanReversionStrategy(), VwapTrendStrategy()):
             res = bt.run(strat, symbol.upper(), candles)
-            print(format_metrics_summary(res))
+            print(format_metrics_summary(res, currency="USD"))
             print("-" * 60)
 
     asyncio.run(_run())
+    return 0
+
+
+def cmd_gate_check(db_path: str) -> int:
+    import math
+
+    with TradingDatabase(db_path, read_only=True) as db:
+        currency = db.get_state("currency", "SOL") or "SOL"
+        trades = db.get_recent_trades(limit=5000)
+        equity = db.get_equity_curve(limit=5000)
+        llm_cost = db.get_daily_llm_spend_usd()
+
+    closed = [t for t in trades if t.get("status") == "CLOSED" and t.get("pnl_sol") is not None]
+    pnls = [float(t["pnl_sol"]) for t in closed]
+    wins = [p for p in pnls if p > 0]
+    losses = [abs(p) for p in pnls if p < 0]
+    net_pnl = sum(pnls)
+    gross_profit = sum(wins)
+    gross_loss = sum(losses)
+    pf = (
+        (gross_profit / gross_loss)
+        if gross_loss > 0
+        else (float("inf") if gross_profit > 0 else 0.0)
+    )
+
+    max_dd = max((float(e["drawdown_pct"]) for e in equity), default=0.0)
+    sorted_pnls = sorted(pnls, reverse=True)
+    drop_n = max(1, math.ceil(len(pnls) * 0.05)) if len(pnls) >= 2 else 0
+    pnl_no_top5 = sum(sorted_pnls[drop_n:])
+
+    checks = [
+        ("Trades cerrados >= 100", len(closed) >= 100, f"{len(closed)} / 100"),
+        ("Retorno neto > 0", net_pnl > 0, f"{net_pnl:+.4f} {currency}"),
+        ("Profit factor > 1.3", pf > 1.3, f"{pf:.2f}"),
+        ("Max drawdown < 20%", max_dd < 0.20, f"{max_dd:.1%}"),
+        ("Ganancia sin top 5% > 0", pnl_no_top5 > 0, f"{pnl_no_top5:+.4f} {currency}"),
+    ]
+    print(f"=== GATE B AUDIT ({db_path}) ===")
+    for label, ok, val in checks:
+        mark = "OK" if ok else "PENDIENTE"
+        print(f"[{mark:9}] {label:26} -> {val}")
+    print(f"Gasto LLM hoy: ${llm_cost:.4f} USD")
+    ready = all(ok for _, ok, _ in checks)
+    print(f"\nResultado Gate B: {'LISTO PARA FASE 4' if ready else 'SEGUIR EN PAPER TRADING'}")
     return 0
 
 
@@ -373,8 +435,15 @@ def main(argv: list[str] | None = None) -> int:
     multi_p.add_argument(
         "--markets", default="crypto,stocks", help="Comma-separated: crypto,stocks"
     )
+    multi_p.add_argument(
+        "--strategy",
+        choices=["all", "momentum", "rsi", "vwap"],
+        default="all",
+        help="Strategies to run simultaneously (default: all)",
+    )
     multi_p.add_argument("--interval", type=int, default=60)
     multi_p.add_argument("--capital-usd", type=float, default=10_000.0)
+    multi_p.add_argument("--db", default="data/meowth_multi.duckdb")
     multi_p.add_argument("--dashboard-port", type=int, default=8080)
     multi_p.add_argument("--dashboard-host", default="127.0.0.1")
 
@@ -384,6 +453,9 @@ def main(argv: list[str] | None = None) -> int:
     bt_p.add_argument("symbol", help="Symbol e.g. BTCUSDT, ETHUSDT, NVDA, SPY")
     bt_p.add_argument("--market", choices=["crypto", "stocks"], default="crypto")
     bt_p.add_argument("--limit", type=int, default=300)
+
+    gate_p = sub.add_parser("gate-check", help="Audit Gate B readiness before live capital")
+    gate_p.add_argument("--db", default=None, help="DuckDB path (defaults to DUCKDB_PATH)")
 
     dash_p = sub.add_parser("dashboard", help="Serve the Lightweight Charts web dashboard")
     dash_p.add_argument("--host", default="0.0.0.0")
@@ -418,13 +490,17 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_run_multi(
             settings,
             markets=args.markets,
+            strategy_choice=args.strategy,
             interval=args.interval,
             capital_usd=args.capital_usd,
+            db_path=args.db,
             dashboard_port=port,
             dashboard_host=args.dashboard_host,
         )
     if args.command == "backtest-symbol":
         return cmd_backtest_symbol(args.symbol, market=args.market, limit=args.limit)
+    if args.command == "gate-check":
+        return cmd_gate_check(args.db or str(settings.duckdb_path))
     if args.command == "dashboard":
         return cmd_dashboard(settings, host=args.host, port=args.port)
     if args.command == "supervisor-review":

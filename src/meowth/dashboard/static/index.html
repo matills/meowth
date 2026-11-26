@@ -240,7 +240,7 @@
       <span style="margin-left:8px;color:#94a3b8;font-weight:700;">MEOWTH DESK</span>
     </div>
     <div id="ticker-strip" class="ticker-strip">Cargando tokens aprobados...</div>
-    <div class="mode-pill">PAPER ON · SOLANA</div>
+    <div id="mode-pill" class="mode-pill">PAPER ON · SOLANA</div>
   </div>
 
   <div class="container">
@@ -359,7 +359,7 @@
 
         <section class="charts-grid">
           <div class="card">
-            <div class="card-title"><span>Curva de Equity (SOL)</span><span style="color:var(--blue);">LIVE</span></div>
+            <div class="card-title"><span id="equity-title">Curva de Equity (SOL)</span><span style="color:var(--blue);">LIVE</span></div>
             <div id="equity-chart" class="chart-box"></div>
           </div>
           <div class="card">
@@ -435,7 +435,13 @@
       btn.textContent = isPaused ? 'REANUDAR SISTEMA' : 'PAUSAR (KILL SWITCH)';
       btn.className = isPaused ? 'resume' : 'kill';
 
-      document.getElementById('h-equity').textContent = `${Number(status.equity_sol || 10).toFixed(2)} SOL`;
+      const unit = status.currency || 'SOL';
+      const marketLabel = status.market_label || 'SOLANA';
+      document.getElementById('mode-pill').textContent = `PAPER ON · ${marketLabel}`;
+      document.getElementById('equity-title').textContent = `Curva de Equity (${unit})`;
+      document.getElementById('h-equity').textContent = unit === 'USD'
+        ? `$${Number(status.equity_sol || 10000).toFixed(2)} USD`
+        : `${Number(status.equity_sol || 10).toFixed(2)} SOL`;
       document.getElementById('h-trades').textContent = status.trades_count;
       document.getElementById('h-wins').textContent = status.wins || 0;
       document.getElementById('h-losses').textContent = status.losses || 0;
