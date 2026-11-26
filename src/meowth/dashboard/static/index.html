@@ -3,102 +3,421 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Meowth — Dashboard</title>
+  <title>Meowth Terminal — Paper Trading 24/7</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700;800&display=swap" rel="stylesheet">
   <script src="https://unpkg.com/lightweight-charts@4.2.1/dist/lightweight-charts.standalone.production.js"></script>
   <style>
     :root {
-      --bg: #0b0f19;
-      --card: #131a2a;
-      --border: #1f2937;
-      --text: #e5e7eb;
-      --muted: #9ca3af;
-      --green: #10b981;
-      --red: #ef4444;
-      --blue: #3b82f6;
+      --bg: #05070b;
+      --panel: #0a0e16;
+      --panel-2: #0d1320;
+      --border: #1e293b;
+      --text: #e2e8f0;
+      --muted: #64748b;
+      --yellow: #facc15;
+      --pink: #f43f5e;
+      --purple: #a855f7;
+      --mint: #2dd4bf;
+      --green: #22c55e;
+      --blue: #38bdf8;
+      --amber: #f59e0b;
     }
-    * { box-sizing: border-box; font-family: Inter, system-ui, sans-serif; }
-    body { margin: 0; padding: 20px; background: var(--bg); color: var(--text); }
-    header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
-    .badge { padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; }
-    .badge.active { background: rgba(16,185,129,0.2); color: var(--green); }
-    .badge.paused { background: rgba(239,68,68,0.2); color: var(--red); }
-    button { background: var(--blue); color: #fff; border: none; border-radius: 6px; padding: 8px 14px; cursor: pointer; font-weight: 600; }
-    button.danger { background: var(--red); }
-    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; margin-bottom: 20px; }
-    .card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
-    .metric-label { font-size: 12px; color: var(--muted); }
-    .metric-val { font-size: 22px; font-weight: 700; margin-top: 6px; }
-    .charts { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px; }
-    @media (max-width: 900px) { .charts { grid-template-columns: 1fr; } }
-    .chart-box { height: 320px; width: 100%; }
-    table { width: 100%; border-collapse: collapse; font-size: 13px; }
-    th, td { text-align: left; padding: 8px; border-bottom: 1px solid var(--border); }
-    th { color: var(--muted); font-weight: 600; }
+    * { box-sizing: border-box; font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace; }
+    body {
+      margin: 0;
+      background: radial-gradient(circle at 20% 0%, #0f172a 0%, var(--bg) 55%);
+      color: var(--text);
+      min-height: 100vh;
+    }
+
+    /* Top window ticker bar */
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 18px;
+      background: #070a10;
+      border-bottom: 1px solid var(--border);
+      font-size: 12px;
+      gap: 16px;
+      overflow-x: auto;
+    }
+    .dots { display: flex; gap: 7px; align-items: center; }
+    .dot { width: 11px; height: 11px; border-radius: 50%; }
+    .dot.r { background: #ef4444; } .dot.y { background: #eab308; } .dot.g { background: #22c55e; }
+    .ticker-strip { display: flex; gap: 18px; color: var(--muted); white-space: nowrap; }
+    .ticker-item b { color: var(--text); }
+    .ticker-item .liq { color: var(--mint); }
+    .mode-pill {
+      border: 1px solid var(--mint);
+      color: var(--mint);
+      padding: 3px 10px;
+      border-radius: 4px;
+      font-weight: 700;
+      font-size: 11px;
+      background: rgba(45, 212, 191, 0.08);
+    }
+
+    .container { max-width: 1480px; margin: 0 auto; padding: 18px; }
+
+    /* Hero header */
+    .hero {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: center;
+      gap: 18px;
+      padding: 16px 20px;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      margin-bottom: 18px;
+    }
+    .brand { display: flex; align-items: center; gap: 16px; }
+    .avatar {
+      width: 56px; height: 56px; border-radius: 50%;
+      background: radial-gradient(circle at 35% 30%, #ffffff, #cbd5e1);
+      display: grid; place-items: center;
+      color: #05070b; font-weight: 800; font-size: 22px;
+      box-shadow: 0 0 24px rgba(45, 212, 191, 0.25);
+    }
+    .title-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .title-row h1 { margin: 0; font-size: 26px; letter-spacing: -0.5px; }
+    .ver-tag {
+      font-size: 11px; padding: 2px 8px; border-radius: 4px;
+      border: 1px dashed var(--yellow); color: var(--yellow);
+    }
+    .status-line { display: flex; align-items: center; gap: 10px; margin-top: 4px; font-size: 12px; color: var(--muted); }
+    .pulse {
+      width: 9px; height: 9px; border-radius: 50%; background: var(--green);
+      box-shadow: 0 0 10px var(--green); display: inline-block;
+    }
+    .pulse.paused { background: var(--pink); box-shadow: 0 0 10px var(--pink); }
+
+    .hero-stats { display: flex; gap: 28px; align-items: center; flex-wrap: wrap; }
+    .stat-block .big { font-size: 30px; font-weight: 800; line-height: 1.1; }
+    .stat-block .lbl { font-size: 11px; color: var(--muted); text-transform: uppercase; }
+    .stat-block.wins .big { color: var(--green); }
+    .stat-block.losses .big { color: var(--pink); }
+
+    .controls { display: flex; gap: 10px; align-items: center; }
+    select, button {
+      background: var(--panel-2); color: var(--text);
+      border: 1px solid var(--border); border-radius: 8px;
+      padding: 8px 12px; font-size: 12px; font-weight: 600; cursor: pointer;
+    }
+    button.kill {
+      border-color: var(--pink); color: var(--pink);
+      background: rgba(244, 63, 94, 0.12);
+    }
+    button.kill:hover { background: rgba(244, 63, 94, 0.22); }
+    button.resume {
+      border-color: var(--green); color: var(--green);
+      background: rgba(34, 197, 94, 0.12);
+    }
+
+    /* Main layout: Agents sidebar + right terminal workspace */
+    .layout { display: grid; grid-template-columns: 290px 1fr; gap: 18px; }
+    @media (max-width: 1050px) { .layout { grid-template-columns: 1fr; } }
+
+    .agents-col { display: flex; flex-direction: column; gap: 12px; }
+    .section-head {
+      display: flex; justify-content: space-between; font-size: 11px;
+      color: var(--muted); letter-spacing: 1px; text-transform: uppercase; padding: 0 4px;
+    }
+    .agent-card {
+      background: var(--panel);
+      border: 1px dashed var(--border);
+      border-radius: 12px;
+      padding: 13px 14px;
+      transition: transform 0.15s ease;
+    }
+    .agent-card:hover { transform: translateY(-1px); }
+    .agent-card.yellow { border-color: rgba(250, 204, 21, 0.55); box-shadow: inset 0 0 24px rgba(250, 204, 21, 0.04); }
+    .agent-card.pink   { border-color: rgba(244, 63, 94, 0.55); box-shadow: inset 0 0 24px rgba(244, 63, 94, 0.04); }
+    .agent-card.purple { border-color: rgba(168, 85, 247, 0.55); box-shadow: inset 0 0 24px rgba(168, 85, 247, 0.04); }
+    .agent-card.mint   { border-color: rgba(45, 212, 191, 0.6); box-shadow: inset 0 0 24px rgba(45, 212, 191, 0.05); }
+    .agent-card.amber  { border-color: rgba(245, 158, 11, 0.55); box-shadow: inset 0 0 24px rgba(245, 158, 11, 0.04); }
+    .agent-card.blue   { border-color: rgba(56, 189, 248, 0.55); box-shadow: inset 0 0 24px rgba(56, 189, 248, 0.04); }
+
+    .agent-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+    .agent-name { font-weight: 800; font-size: 13px; letter-spacing: 0.5px; }
+    .agent-card.yellow .agent-name { color: var(--yellow); }
+    .agent-card.pink .agent-name { color: var(--pink); }
+    .agent-card.purple .agent-name { color: var(--purple); }
+    .agent-card.mint .agent-name { color: var(--mint); }
+    .agent-card.amber .agent-name { color: var(--amber); }
+    .agent-card.blue .agent-name { color: var(--blue); }
+
+    .pill {
+      font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 4px;
+      background: rgba(255,255,255,0.06); color: var(--text);
+    }
+    .agent-desc { font-size: 11px; color: var(--muted); line-height: 1.5; }
+    .agent-meta { font-size: 11px; color: var(--text); margin-top: 6px; }
+
+    /* Workspace */
+    .workspace { display: flex; flex-direction: column; gap: 16px; }
+
+    /* Pipeline Banner */
+    .pipeline-box {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 16px;
+    }
+    .pipeline-flow {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+      margin-top: 12px;
+    }
+    @media (max-width: 750px) { .pipeline-flow { grid-template-columns: repeat(2, 1fr); } }
+    .mini-kpi {
+      background: var(--panel-2);
+      border: 1px dashed var(--border);
+      border-radius: 10px;
+      padding: 12px;
+    }
+    .mini-kpi.k-red { border-color: rgba(244,63,94,0.5); }
+    .mini-kpi.k-yel { border-color: rgba(250,204,21,0.5); }
+    .mini-kpi.k-pur { border-color: rgba(168,85,247,0.5); }
+    .mini-kpi.k-blu { border-color: rgba(56,189,248,0.5); }
+    .mini-kpi .k-lbl { font-size: 10px; color: var(--muted); text-transform: uppercase; }
+    .mini-kpi .k-val { font-size: 20px; font-weight: 800; margin-top: 4px; }
+    .mini-kpi .k-sub { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+    /* Charts */
+    .charts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    @media (max-width: 900px) { .charts-grid { grid-template-columns: 1fr; } }
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 15px;
+    }
+    .card-title {
+      display: flex; justify-content: space-between; align-items: center;
+      margin: 0 0 10px 0; font-size: 12px; color: var(--muted);
+      text-transform: uppercase; letter-spacing: 0.8px;
+    }
+    .chart-box { height: 290px; width: 100%; }
+
+    /* Terminal tail log + trades */
+    .bottom-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    @media (max-width: 950px) { .bottom-grid { grid-template-columns: 1fr; } }
+
+    .terminal {
+      background: #04060a;
+      border: 1px solid #1e293b;
+      border-radius: 10px;
+      padding: 12px;
+      height: 290px;
+      overflow-y: auto;
+      font-size: 11.5px;
+      line-height: 1.55;
+    }
+    .log-line { margin-bottom: 6px; border-bottom: 1px solid rgba(30,41,59,0.4); padding-bottom: 4px; }
+    .tag { display: inline-block; padding: 1px 6px; border-radius: 3px; font-size: 10px; font-weight: 700; margin-right: 6px; }
+    .tag.enter { background: rgba(34,197,94,0.18); color: var(--green); }
+    .tag.exit { background: rgba(56,189,248,0.18); color: var(--blue); }
+    .tag.filtered { background: rgba(244,63,94,0.18); color: var(--pink); }
+    .ts { color: var(--muted); margin-right: 6px; }
+    .reason { color: #94a3b8; display: block; padding-left: 14px; font-size: 11px; }
+
+    table { width: 100%; border-collapse: collapse; font-size: 11.5px; }
+    th, td { text-align: left; padding: 7px 6px; border-bottom: 1px solid rgba(30,41,59,0.6); }
+    th { color: var(--muted); font-weight: 600; font-size: 10.5px; text-transform: uppercase; }
+    .pnl-pos { color: var(--green); font-weight: 700; }
+    .pnl-neg { color: var(--pink); font-weight: 700; }
   </style>
 </head>
 <body>
-  <header>
-    <div>
-      <h1 style="margin:0;font-size:20px;">Meowth — Paper Trading 24/7</h1>
-      <span id="status-badge" class="badge active">ACTIVO</span>
+  <div class="topbar">
+    <div class="dots">
+      <span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
+      <span style="margin-left:8px;color:#94a3b8;font-weight:700;">MEOWTH DESK</span>
     </div>
-    <div style="display:flex;gap:10px;align-items:center;">
-      <select id="mint-select" style="background:#131a2a;color:#e5e7eb;border:1px solid #1f2937;padding:7px;border-radius:6px;"></select>
-      <button id="toggle-pause" class="danger">Pausar (Kill Switch)</button>
-    </div>
-  </header>
+    <div id="ticker-strip" class="ticker-strip">Cargando tokens aprobados...</div>
+    <div class="mode-pill">PAPER ON · SOLANA</div>
+  </div>
 
-  <section class="grid">
-    <div class="card"><div class="metric-label">Trades</div><div class="metric-val" id="m-trades">0</div></div>
-    <div class="card"><div class="metric-label">Rechazos auditados</div><div class="metric-val" id="m-rejections">0</div></div>
-    <div class="card"><div class="metric-label">Gasto LLM hoy (USD)</div><div class="metric-val" id="m-llm">$0.0000</div></div>
-    <div class="card"><div class="metric-label">Último dato</div><div class="metric-val" id="m-last" style="font-size:14px;">—</div></div>
-  </section>
+  <div class="container">
+    <header class="hero">
+      <div class="brand">
+        <div class="avatar">M</div>
+        <div>
+          <div class="title-row">
+            <h1>Meowth Terminal</h1>
+            <span class="ver-tag">v0.1-paper</span>
+          </div>
+          <div class="status-line">
+            <span id="pulse-dot" class="pulse"></span>
+            <span id="status-text">running · every trade gets a reason</span>
+          </div>
+        </div>
+      </div>
 
-  <section class="charts">
-    <div class="card">
-      <h3 style="margin-top:0;">Curva de Equity (SOL)</h3>
-      <div id="equity-chart" class="chart-box"></div>
-    </div>
-    <div class="card">
-      <h3 style="margin-top:0;">Velas 5m + Entradas/Salidas</h3>
-      <div id="candle-chart" class="chart-box"></div>
-    </div>
-  </section>
+      <div class="hero-stats">
+        <div class="stat-block">
+          <div class="big" id="h-equity">10.00 SOL</div>
+          <div class="lbl">equity</div>
+        </div>
+        <div class="stat-block">
+          <div class="big" id="h-trades">0</div>
+          <div class="lbl">trades</div>
+        </div>
+        <div class="stat-block wins">
+          <div class="big" id="h-wins">0</div>
+          <div class="lbl">wins</div>
+        </div>
+        <div class="stat-block losses">
+          <div class="big" id="h-losses">0</div>
+          <div class="lbl">losses</div>
+        </div>
+      </div>
 
-  <section class="charts">
-    <div class="card">
-      <h3 style="margin-top:0;">Últimos Trades</h3>
-      <table>
-        <thead><tr><th>Token</th><th>Lado</th><th>Estado</th><th>SOL</th><th>PnL</th><th>Motivo</th></tr></thead>
-        <tbody id="trades-body"></tbody>
-      </table>
+      <div class="controls">
+        <select id="mint-select"></select>
+        <button id="toggle-pause" class="kill">PAUSAR (KILL SWITCH)</button>
+      </div>
+    </header>
+
+    <div class="layout">
+      <!-- Left sidebar: Live Agents -->
+      <aside class="agents-col">
+        <div class="section-head"><span>AGENTS</span><span style="color:var(--mint);">6 online</span></div>
+
+        <div class="agent-card yellow">
+          <div class="agent-top"><span class="agent-name">SCOUT</span><span class="pill">SCAN</span></div>
+          <div class="agent-desc">DexScreener + Solana RPC · mint/freeze revocadas, liq &ge; $50k</div>
+          <div class="agent-meta" id="a-scout">tokens aprobados: 0</div>
+        </div>
+
+        <div class="agent-card pink">
+          <div class="agent-top"><span class="agent-name">ANALYST (LLM)</span><span class="pill">GEMINI</span></div>
+          <div class="agent-desc">Filtra riesgo de rug en JSON · fallback determinista si falla</div>
+          <div class="agent-meta" id="a-llm">gasto hoy: $0.0000</div>
+        </div>
+
+        <div class="agent-card purple">
+          <div class="agent-top"><span class="agent-name">STRATEGIST</span><span class="pill">RULES</span></div>
+          <div class="agent-desc">Breakout EMA(5/15) + volumen · 100% código determinista</div>
+          <div class="agent-meta">velas 5m · sin IA en señales</div>
+        </div>
+
+        <div class="agent-card pink">
+          <div class="agent-top"><span class="agent-name">RISK / VETO</span><span class="pill">GUARD</span></div>
+          <div class="agent-desc">Máx 2% por trade · slippage &le; 2% · monitor de rug -40%</div>
+          <div class="agent-meta" id="a-risk">posiciones abiertas: 0 / 5</div>
+        </div>
+
+        <div class="agent-card mint">
+          <div class="agent-top"><span class="agent-name">EXECUTOR</span><span class="pill">PAPER</span></div>
+          <div class="agent-desc">Jupiter Swap v1 · peor de 2 cotizaciones + fees reales</div>
+          <div class="agent-meta" id="a-exec">último dato: —</div>
+        </div>
+
+        <div class="agent-card amber">
+          <div class="agent-top"><span class="agent-name">LOGGER</span><span class="pill">DUCKDB</span></div>
+          <div class="agent-desc">Registra cada trade y cada rechazo con su motivo exacto</div>
+          <div class="agent-meta" id="a-log">rechazos auditados: 0</div>
+        </div>
+      </aside>
+
+      <!-- Right workspace -->
+      <main class="workspace">
+        <section class="pipeline-box">
+          <div class="section-head">
+            <span>MEOWTH DESK · SCOUT &rarr; ANALYST &rarr; STRATEGIST &rarr; RISK &rarr; EXECUTOR</span>
+            <span id="winrate-tag" style="color:var(--mint);">win rate: 0%</span>
+          </div>
+          <div class="pipeline-flow">
+            <div class="mini-kpi k-red">
+              <div class="k-lbl">FILTERED (RECHAZOS)</div>
+              <div class="k-val" id="m-rejections">0</div>
+              <div class="k-sub">auditados en DuckDB</div>
+            </div>
+            <div class="mini-kpi k-yel">
+              <div class="k-lbl">TOKENS ACTIVOS</div>
+              <div class="k-val" id="m-approved">0</div>
+              <div class="k-sub">graduados + watchlist</div>
+            </div>
+            <div class="mini-kpi k-pur">
+              <div class="k-lbl">SIZING / CAP</div>
+              <div class="k-val">2.0% eq</div>
+              <div class="k-sub">max slip 2.0% · max 5 pos</div>
+            </div>
+            <div class="mini-kpi k-blu">
+              <div class="k-lbl">GASTO LLM HOY</div>
+              <div class="k-val" id="m-llm">$0.0000</div>
+              <div class="k-sub">tope diario activo</div>
+            </div>
+          </div>
+        </section>
+
+        <section class="charts-grid">
+          <div class="card">
+            <div class="card-title"><span>Curva de Equity (SOL)</span><span style="color:var(--blue);">LIVE</span></div>
+            <div id="equity-chart" class="chart-box"></div>
+          </div>
+          <div class="card">
+            <div class="card-title"><span id="candle-title">Velas 5m + Entradas/Salidas</span><span style="color:var(--mint);">5M OHLC</span></div>
+            <div id="candle-chart" class="chart-box"></div>
+          </div>
+        </section>
+
+        <section class="bottom-grid">
+          <div class="card">
+            <div class="card-title"><span>$ tail -f meowth.log</span><span style="color:var(--yellow);">LIVE FEED</span></div>
+            <div id="terminal-log" class="terminal"></div>
+          </div>
+          <div class="card">
+            <div class="card-title"><span>Últimos Trades</span><span style="color:var(--mint);">PAPER LEDGER</span></div>
+            <div style="max-height:290px;overflow-y:auto;">
+              <table>
+                <thead><tr><th>Token</th><th>Lado</th><th>Estado</th><th>SOL</th><th>PnL</th></tr></thead>
+                <tbody id="trades-body"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+      </main>
     </div>
-    <div class="card">
-      <h3 style="margin-top:0;">Oportunidades Rechazadas</h3>
-      <table>
-        <thead><tr><th>Etapa</th><th>Token</th><th>Motivo</th></tr></thead>
-        <tbody id="rejections-body"></tbody>
-      </table>
-    </div>
-  </section>
+  </div>
 
   <script>
-    const chartOpts = { layout: { background: { color: '#131a2a' }, textColor: '#9ca3af' }, grid: { vertLines: { color: '#1f2937' }, horzLines: { color: '#1f2937' } } };
+    const chartOpts = {
+      layout: { background: { color: '#0a0e16' }, textColor: '#64748b' },
+      grid: { vertLines: { color: '#111827' }, horzLines: { color: '#111827' } },
+      crosshair: { mode: 0 },
+    };
     const equityChart = LightweightCharts.createChart(document.getElementById('equity-chart'), chartOpts);
-    const equitySeries = equityChart.addAreaSeries({ lineColor: '#3b82f6', topColor: 'rgba(59,130,246,0.35)', bottomColor: 'rgba(59,130,246,0.02)' });
+    const equitySeries = equityChart.addAreaSeries({
+      lineColor: '#38bdf8',
+      topColor: 'rgba(56, 189, 248, 0.30)',
+      bottomColor: 'rgba(56, 189, 248, 0.01)',
+      lineWidth: 2,
+    });
 
     const candleChart = LightweightCharts.createChart(document.getElementById('candle-chart'), chartOpts);
     const candleSeries = candleChart.addCandlestickSeries({
-      upColor: '#10b981',
-      downColor: '#ef4444',
+      upColor: '#22c55e',
+      downColor: '#f43f5e',
       borderVisible: false,
-      wickUpColor: '#10b981',
-      wickDownColor: '#ef4444',
+      wickUpColor: '#22c55e',
+      wickDownColor: '#f43f5e',
       priceFormat: { type: 'price', precision: 8, minMove: 0.00000001 },
     });
 
     let isPaused = false;
+    function fmtTime(iso) {
+      if (!iso) return '--:--';
+      const d = new Date(iso);
+      return d.toTimeString().slice(0, 8);
+    }
+
     async function refresh() {
       const [status, equity, trades, rejections] = await Promise.all([
         fetch('/api/status').then(r => r.json()),
@@ -108,37 +427,63 @@
       ]);
 
       isPaused = status.paused;
-      const badge = document.getElementById('status-badge');
+      const pulse = document.getElementById('pulse-dot');
+      const stText = document.getElementById('status-text');
       const btn = document.getElementById('toggle-pause');
-      badge.textContent = isPaused ? 'PAUSADO' : 'ACTIVO';
-      badge.className = 'badge ' + (isPaused ? 'paused' : 'active');
-      btn.textContent = isPaused ? 'Reanudar sistema' : 'Pausar (Kill Switch)';
-      btn.className = isPaused ? '' : 'danger';
+      pulse.className = 'pulse' + (isPaused ? ' paused' : '');
+      stText.textContent = isPaused ? 'PAUSADO (kill switch manual)' : 'running · every trade gets a reason';
+      btn.textContent = isPaused ? 'REANUDAR SISTEMA' : 'PAUSAR (KILL SWITCH)';
+      btn.className = isPaused ? 'resume' : 'kill';
 
-      document.getElementById('m-trades').textContent = status.trades_count;
+      document.getElementById('h-equity').textContent = `${Number(status.equity_sol || 10).toFixed(2)} SOL`;
+      document.getElementById('h-trades').textContent = status.trades_count;
+      document.getElementById('h-wins').textContent = status.wins || 0;
+      document.getElementById('h-losses').textContent = status.losses || 0;
+      document.getElementById('winrate-tag').textContent = `win rate: ${Math.round((status.win_rate || 0) * 100)}%`;
+
       document.getElementById('m-rejections').textContent = status.rejections_count;
-      document.getElementById('m-llm').textContent = '$' + status.daily_llm_spend_usd.toFixed(4);
-      document.getElementById('m-last').textContent = status.last_data_ts || '—';
+      document.getElementById('m-approved').textContent = (status.approved_mints || []).length;
+      document.getElementById('m-llm').textContent = '$' + Number(status.daily_llm_spend_usd || 0).toFixed(4);
+
+      document.getElementById('a-scout').textContent = `tokens aprobados: ${(status.approved_mints || []).length}`;
+      document.getElementById('a-llm').textContent = `gasto hoy: $${Number(status.daily_llm_spend_usd || 0).toFixed(4)}`;
+      document.getElementById('a-risk').textContent = `posiciones abiertas: ${status.open_positions || 0} / 5`;
+      document.getElementById('a-exec').textContent = `último dato: ${fmtTime(status.last_data_ts)}`;
+      document.getElementById('a-log').textContent = `rechazos auditados: ${status.rejections_count}`;
+
+      const tokens = status.approved_tokens || (status.approved_mints || []).map(m => ({ mint: m, symbol: m.slice(0, 6) }));
+      const strip = document.getElementById('ticker-strip');
+      if (tokens.length > 0) {
+        strip.innerHTML = tokens.slice(0, 6).map(t =>
+          `<span class="ticker-item"><b>$${t.symbol}</b> <span class="liq">$${Math.round((t.liquidity_usd || 0)/1000)}k</span></span>`
+        ).join('');
+      }
 
       const sel = document.getElementById('mint-select');
-      const tokens = status.approved_tokens || status.approved_mints.map(m => ({ mint: m, symbol: m.slice(0, 8) }));
       if (sel.options.length !== tokens.length && tokens.length > 0) {
         const prev = sel.value;
         sel.innerHTML = '';
         tokens.forEach(t => {
           const opt = document.createElement('option');
           opt.value = t.mint;
-          opt.textContent = `${t.symbol} (${t.mint.slice(0, 6)}...)`;
+          opt.textContent = `$${t.symbol} (${t.mint.slice(0, 6)}...)`;
           sel.appendChild(opt);
         });
         if (prev) sel.value = prev;
       }
 
       if (equity.length > 0) {
-        equitySeries.setData(equity.map(e => ({ time: Math.floor(new Date(e.ts).getTime() / 1000), value: e.total_equity_sol })));
+        equitySeries.setData(equity.map(e => ({
+          time: Math.floor(new Date(e.ts).getTime() / 1000),
+          value: e.total_equity_sol,
+        })));
       }
 
       const activeMint = sel.value || (status.approved_mints[0] || '');
+      const activeTok = tokens.find(t => t.mint === activeMint);
+      if (activeTok) {
+        document.getElementById('candle-title').textContent = `$${activeTok.symbol} · Velas 5m + Entradas/Salidas`;
+      }
       if (activeMint) {
         const candles = await fetch(`/api/candles?mint=${encodeURIComponent(activeMint)}&timeframe=5m`).then(r => r.json());
         if (candles.length > 0) {
@@ -152,7 +497,7 @@
             .map(t => ({
               time: Math.floor(new Date(t.opened_at).getTime() / 1000),
               position: t.side === 'BUY' ? 'belowBar' : 'aboveBar',
-              color: t.side === 'BUY' ? '#10b981' : '#ef4444',
+              color: t.side === 'BUY' ? '#22c55e' : '#f43f5e',
               shape: t.side === 'BUY' ? 'arrowUp' : 'arrowDown',
               text: t.side,
             }))
@@ -161,13 +506,34 @@
         }
       }
 
-      document.getElementById('trades-body').innerHTML = trades.slice(0, 15).map(t =>
-        `<tr><td>${t.mint.slice(0, 8)}</td><td>${t.side}</td><td>${t.status}</td><td>${Number(t.amount_sol).toFixed(3)}</td><td>${t.pnl_sol != null ? Number(t.pnl_sol).toFixed(4) : '—'}</td><td>${t.reason}</td></tr>`
+      // Unified terminal log feed ($ tail -f meowth.log)
+      const feed = [
+        ...trades.slice(0, 12).map(t => ({
+          ts: t.opened_at,
+          kind: t.side === 'BUY' ? 'enter' : 'exit',
+          label: t.side === 'BUY' ? 'ENTER' : 'EXIT',
+          mint: t.mint,
+          reason: `${t.reason} (${Number(t.amount_sol).toFixed(3)} SOL)`,
+        })),
+        ...rejections.slice(0, 18).map(r => ({
+          ts: r.ts,
+          kind: 'filtered',
+          label: 'FILTERED',
+          mint: r.mint,
+          reason: r.reason,
+        })),
+      ].sort((a, b) => new Date(b.ts) - new Date(a.ts)).slice(0, 22);
+
+      document.getElementById('terminal-log').innerHTML = feed.map(item =>
+        `<div class="log-line"><span class="ts">${fmtTime(item.ts)}</span><span class="tag ${item.kind}">${item.label}</span><b>${item.mint.slice(0, 8)}</b><span class="reason">${item.reason}</span></div>`
       ).join('');
 
-      document.getElementById('rejections-body').innerHTML = rejections.slice(0, 15).map(r =>
-        `<tr><td>${r.stage}</td><td>${r.mint.slice(0, 8)}</td><td>${r.reason}</td></tr>`
-      ).join('');
+      document.getElementById('trades-body').innerHTML = trades.slice(0, 15).map(t => {
+        const pnl = t.pnl_sol != null ? Number(t.pnl_sol) : null;
+        const pnlCls = pnl == null ? '' : pnl >= 0 ? 'pnl-pos' : 'pnl-neg';
+        const pnlTxt = pnl == null ? '—' : `${pnl >= 0 ? '+' : ''}${pnl.toFixed(4)}`;
+        return `<tr><td>${t.mint.slice(0, 8)}</td><td>${t.side}</td><td>${t.status}</td><td>${Number(t.amount_sol).toFixed(3)}</td><td class="${pnlCls}">${pnlTxt}</td></tr>`;
+      }).join('');
     }
 
     document.getElementById('toggle-pause').addEventListener('click', async () => {

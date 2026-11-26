@@ -20,13 +20,27 @@ def build_dashboard_payload(
 ) -> tuple[int, dict | list]:
     if path == "/api/status":
         approved = db.get_approved_tokens()
+        trades = db.get_recent_trades(limit=200)
+        equity = db.get_equity_curve(limit=2)
+        closed = [t for t in trades if t.get("status") == "CLOSED" and t.get("pnl_sol") is not None]
+        wins = sum(1 for t in closed if float(t["pnl_sol"] or 0.0) > 0)
+        losses = sum(1 for t in closed if float(t["pnl_sol"] or 0.0) <= 0)
+        latest_eq = equity[-1] if equity else None
         return HTTPStatus.OK, {
             "paused": db.get_state("manual_pause", "false") == "true",
             "trades_count": db.count_rows("trades"),
+            "wins": wins,
+            "losses": losses,
+            "win_rate": (wins / len(closed)) if closed else 0.0,
+            "equity_sol": float(latest_eq["total_equity_sol"]) if latest_eq else 10.0,
+            "open_positions": int(latest_eq["open_positions"]) if latest_eq else 0,
             "rejections_count": db.count_rows("rejections"),
             "daily_llm_spend_usd": db.get_daily_llm_spend_usd(),
             "approved_mints": [t.mint for t in approved],
-            "approved_tokens": [{"mint": t.mint, "symbol": t.symbol} for t in approved],
+            "approved_tokens": [
+                {"mint": t.mint, "symbol": t.symbol, "dex": t.dex, "liquidity_usd": t.liquidity_usd}
+                for t in approved
+            ],
             "last_data_ts": db.get_state("last_data_ts"),
         }
     if path == "/api/equity":
