@@ -158,6 +158,11 @@ class TradingEngine:
                 meta.entry_liquidity_usd > 0
                 and liq < meta.entry_liquidity_usd * (1.0 - self.rug_liquidity_drop_pct)
             )
+            gain_from_entry = (
+                (meta.peak_price_sol - meta.entry_price_sol) / meta.entry_price_sol
+                if meta.entry_price_sol > 0
+                else 0.0
+            )
             if is_rug:
                 exit_reason = (
                     f"rug_alert_liquidity_drop ({liq:,.0f} < {meta.entry_liquidity_usd:,.0f})"
@@ -165,6 +170,8 @@ class TradingEngine:
                 summary.rug_exits += 1
             elif price <= meta.entry_price_sol * (1.0 - self.settings.risk_stop_loss_pct):
                 exit_reason = "stop_loss"
+            elif gain_from_entry >= 0.12 and price <= meta.peak_price_sol * 0.94:
+                exit_reason = f"trailing_stop (pico +{gain_from_entry:.1%})"
             elif (current - meta.opened_at) >= timedelta(hours=self.settings.risk_max_hold_hours):
                 exit_reason = "max_hold_time"
             else:

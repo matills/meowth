@@ -40,6 +40,7 @@ class MultiAssetCycleSummary:
 class _OpenPos:
     symbol: str
     entry_price_usd: float
+    peak_price_usd: float
     opened_at: datetime
     strategy_name: str
 
@@ -59,6 +60,10 @@ class MultiAssetEngine:
         executor: MultiAssetPaperExecutor,
         notifier: TelegramNotifier | None = None,
         timeframe: Timeframe = Timeframe.M5,
+        stop_loss_pct: float = 0.02,
+        trailing_activation_pct: float = 0.012,
+        trailing_distance_pct: float = 0.005,
+        cooldown_minutes: int = 15,
     ) -> None:
         self.settings = settings
         self.db = db
@@ -73,10 +78,15 @@ class MultiAssetEngine:
         self.executor = executor
         self.notifier = notifier
         self.timeframe = timeframe
+        self.stop_loss_pct = stop_loss_pct
+        self.trailing_activation_pct = trailing_activation_pct
+        self.trailing_distance_pct = trailing_distance_pct
+        self.cooldown_minutes = cooldown_minutes
 
         self._peak_equity_usd = executor.cash_usd
         self._daily_pnl_usd = 0.0
         self._open_pos: dict[str, _OpenPos] = {}
+        self._last_exit_at: dict[str, datetime] = {}
         self.db.set_state("currency", "USD")
         self.db.set_state("market_label", "CRYPTO + STOCKS")
 
@@ -146,26 +156,39 @@ class MultiAssetEngine:
         if summary.symbols_updated > 0:
             self.db.set_state("last_data_ts", current.isoformat())
 
-        # 2. Check exits on open positions (stop loss, max hold, strategy SELL)
+        # 2. Check exits on open positions (stop loss, trailing stop, max hold, strategy SELL)
         for symbol in list(self._open_pos.keys()):
             pos = self._open_pos[symbol]
             quote = latest_quotes.get(symbol)
             if quote is None:
                 continue
 
+            pos.peak_price_usd = max(pos.peak_price_usd, quote.price_usd)
+            gain_from_entry = (pos.peak_price_usd - pos.entry_price_usd) / pos.entry_price_usd
+
             exit_reason: str | None = None
-            if quote.price_usd <= pos.entry_price_usd * (1.0 - self.settings.risk_stop_loss_pct):
-                exit_reason = "stop_loss"
+            if quote.price_usd <= pos.entry_price_usd * (1.0 - self.stop_loss_pct):
+                exit_reason = f"stop_loss (-{self.stop_loss_pct:.1%})"
+            elif (
+                gain_from_entry >= self.trailing_activation_pct
+                and quote.price_usd <= pos.peak_price_usd * (1.0 - self.trailing_distance_pct)
+            ):
+                exit_reason = (
+                    f"trailing_stop (pico +{gain_from_entry:.2%}, "
+                    f"cierre {((quote.price_usd / pos.entry_price_usd) - 1):.2%})"
+                )
             elif (current - pos.opened_at) >= timedelta(hours=self.settings.risk_max_hold_hours):
                 exit_reason = "max_hold_time"
             else:
-                candles = self.db.get_recent_candles(
+                all_candles = self.db.get_recent_candles(
                     symbol, timeframe=self.timeframe.value, limit=100
                 )
+                # Evaluate strategy strictly on CLOSED candles (drop current forming bar)
+                closed_candles = all_candles[:-1] if len(all_candles) > 1 else all_candles
                 for strat in self.strategies:
                     if strat.name != pos.strategy_name:
                         continue
-                    sig = strat.evaluate(symbol, candles, has_open_position=True)
+                    sig = strat.evaluate(symbol, closed_candles, has_open_position=True)
                     if sig is not None and sig.side == Side.SELL:
                         self.db.insert_signal(sig)
                         summary.signals_generated += 1
@@ -181,6 +204,7 @@ class MultiAssetEngine:
                 summary.trades_executed += 1
                 if rec.status == TradeStatus.CLOSED:
                     self._open_pos.pop(symbol, None)
+                    self._last_exit_at[symbol] = current
                     if rec.pnl_sol is not None:
                         self._daily_pnl_usd += rec.pnl_sol
                     await self._notify(
@@ -188,14 +212,23 @@ class MultiAssetEngine:
                         f"PnL: ${(rec.pnl_sol or 0.0):+.2f}"
                     )
 
-        # 3. Evaluate BUY signals across all updated symbols and configured strategies
+        # 3. Evaluate BUY signals strictly on CLOSED candles + per-symbol cooldown
         for symbol, quote in latest_quotes.items():
             if symbol in self._open_pos:
                 continue
-            candles = self.db.get_recent_candles(symbol, timeframe=self.timeframe.value, limit=100)
+            last_exit = self._last_exit_at.get(symbol)
+            if last_exit is not None and (current - last_exit) < timedelta(
+                minutes=self.cooldown_minutes
+            ):
+                continue
+
+            all_candles = self.db.get_recent_candles(
+                symbol, timeframe=self.timeframe.value, limit=100
+            )
+            closed_candles = all_candles[:-1] if len(all_candles) > 1 else all_candles
             sig = None
             for strat in self.strategies:
-                candidate_sig = strat.evaluate(symbol, candles, has_open_position=False)
+                candidate_sig = strat.evaluate(symbol, closed_candles, has_open_position=False)
                 if candidate_sig is not None and candidate_sig.side == Side.BUY:
                     sig = candidate_sig
                     break
@@ -255,6 +288,7 @@ class MultiAssetEngine:
                 self._open_pos[symbol] = _OpenPos(
                     symbol=symbol,
                     entry_price_usd=rec.filled_price_sol,
+                    peak_price_usd=rec.filled_price_sol,
                     opened_at=current,
                     strategy_name=sig.strategy_name,
                 )

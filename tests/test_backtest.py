@@ -37,9 +37,9 @@ def _make_candles(prices: list[float], volumes: list[float] | None = None) -> li
 
 
 def test_momentum_breakout_backtest_takes_partial_tp_and_computes_metrics() -> None:
-    # Flat base for 20 bars, then breakout with volume spike (+70% rally), then pullback
-    prices = [1.0] * 20 + [1.05, 1.15, 1.35, 1.65, 1.75, 1.40, 1.25, 1.10]
-    vols = [1000.0] * 20 + [3500.0, 3000.0, 2800.0, 2500.0, 2000.0, 1800.0, 1500.0, 1200.0]
+    # Flat base for 25 bars, then breakout with volume spike (+70% rally), then pullback
+    prices = [1.0] * 25 + [1.05, 1.15, 1.35, 1.65, 1.75, 1.40, 1.25, 1.10]
+    vols = [1000.0] * 25 + [3500.0, 3000.0, 2800.0, 2500.0, 2000.0, 1800.0, 1500.0, 1200.0]
     candles = _make_candles(prices, vols)
 
     engine = BacktestEngine(BacktestConfig(initial_capital_sol=10.0, position_size_pct=0.05))

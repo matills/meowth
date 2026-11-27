@@ -1,4 +1,4 @@
-"""Concrete deterministic strategies for 1m/5m graduated Solana tokens."""
+"""Concrete deterministic strategies for 1m/5m crypto and equity candles."""
 
 from __future__ import annotations
 
@@ -9,21 +9,27 @@ from meowth.strategies.base import Strategy, ema, rsi
 
 
 class MomentumBreakoutStrategy(Strategy):
-    """Buys breakouts above recent high with EMA trend alignment and volume expansion."""
+    """Buys confirmed breakouts aligned with EMA(9/21/50) trend and volume expansion."""
 
     name = "momentum_breakout"
 
     def __init__(
         self,
         *,
-        fast_ema: int = 5,
-        slow_ema: int = 15,
-        breakout_lookback: int = 10,
+        fast_ema: int = 9,
+        slow_ema: int = 21,
+        trend_ema: int = 50,
+        breakout_lookback: int = 12,
+        min_breakout_pct: float = 0.0015,
+        exit_buffer_pct: float = 0.0015,
         volume_mult: float = 1.8,
     ) -> None:
         self.fast_ema = fast_ema
         self.slow_ema = slow_ema
+        self.trend_ema = trend_ema
         self.breakout_lookback = breakout_lookback
+        self.min_breakout_pct = min_breakout_pct
+        self.exit_buffer_pct = exit_buffer_pct
         self.volume_mult = volume_mult
 
     def evaluate(
@@ -41,6 +47,8 @@ class MomentumBreakoutStrategy(Strategy):
         volumes = [c.volume_usd for c in candles]
         fast = ema(closes, self.fast_ema)
         slow = ema(closes, self.slow_ema)
+        trend_period = min(self.trend_ema, len(closes) - 1)
+        trend = ema(closes, trend_period)
 
         last = candles[-1]
         prev_window = candles[-self.breakout_lookback - 1 : -1]
@@ -48,29 +56,31 @@ class MomentumBreakoutStrategy(Strategy):
         avg_vol = sum(volumes[-self.breakout_lookback - 1 : -1]) / self.breakout_lookback
 
         if not has_open_position:
-            trend_up = fast[-1] > slow[-1]
-            breakout = last.close > recent_high
+            trend_up = fast[-1] > slow[-1] and last.close > trend[-1]
+            breakout = last.close > recent_high * (1.0 + self.min_breakout_pct)
             vol_spike = avg_vol > 0 and last.volume_usd >= avg_vol * self.volume_mult
-            if trend_up and breakout and vol_spike:
+            bullish_bar = last.close > last.open
+            if trend_up and breakout and vol_spike and bullish_bar:
                 vol_ratio = last.volume_usd / avg_vol
                 return Signal(
                     mint=mint,
                     strategy_name=self.name,
                     side=Side.BUY,
                     reason=(
-                        f"Breakout sobre máximo {self.breakout_lookback} velas "
-                        f"({last.close:.6f} > {recent_high:.6f}) con volumen {vol_ratio:.1f}x"
+                        f"Breakout {self.breakout_lookback}v "
+                        f"({last.close:.6f} > {recent_high:.6f}) vol {vol_ratio:.1f}x + EMA50"
                     ),
                     metadata={"ema_fast": fast[-1], "ema_slow": slow[-1], "vol_ratio": vol_ratio},
                 )
         else:
-            if fast[-1] < slow[-1]:
+            # Require a clear bearish cross (buffer avoids micro-whipsaws)
+            if fast[-1] < slow[-1] * (1.0 - self.exit_buffer_pct):
                 return Signal(
                     mint=mint,
                     strategy_name=self.name,
                     side=Side.SELL,
                     reason=(
-                        f"Cruce bajista EMA({self.fast_ema}/{self.slow_ema}): "
+                        f"Cruce bajista confirmado EMA({self.fast_ema}/{self.slow_ema}): "
                         f"{fast[-1]:.6f} < {slow[-1]:.6f}"
                     ),
                 )
@@ -78,7 +88,7 @@ class MomentumBreakoutStrategy(Strategy):
 
 
 class MeanReversionStrategy(Strategy):
-    """Buys oversold RSI pullbacks on green reversal candles; exits on RSI normalization."""
+    """Buys confirmed oversold RSI pullbacks; avoids falling knives and exits on RSI strength."""
 
     name = "mean_reversion_rsi"
 
@@ -86,8 +96,8 @@ class MeanReversionStrategy(Strategy):
         self,
         *,
         rsi_period: int = 14,
-        oversold: float = 30.0,
-        overbought: float = 65.0,
+        oversold: float = 28.0,
+        overbought: float = 68.0,
     ) -> None:
         self.rsi_period = rsi_period
         self.oversold = oversold
@@ -100,7 +110,7 @@ class MeanReversionStrategy(Strategy):
         *,
         has_open_position: bool = False,
     ) -> Signal | None:
-        if len(candles) < self.rsi_period + 2:
+        if len(candles) < self.rsi_period + 3:
             return None
 
         closes = [c.close for c in candles]
@@ -109,16 +119,24 @@ class MeanReversionStrategy(Strategy):
         if prev_rsi is None or curr_rsi is None:
             return None
 
+        prev = candles[-2]
         last = candles[-1]
         if not has_open_position:
-            if prev_rsi <= self.oversold and last.close > last.open and curr_rsi > prev_rsi:
+            # Require real reversal: prior bar oversold + current bar closes above prior close
+            rebounded = (
+                prev_rsi <= self.oversold
+                and last.close > last.open
+                and last.close > prev.close
+                and curr_rsi > prev_rsi + 2.0
+            )
+            if rebounded:
                 return Signal(
                     mint=mint,
                     strategy_name=self.name,
                     side=Side.BUY,
                     reason=(
-                        f"Rebote sobreventa RSI({self.rsi_period}): "
-                        f"{prev_rsi:.1f} -> {curr_rsi:.1f} con vela alcista"
+                        f"Rebote confirmado RSI({self.rsi_period}): "
+                        f"{prev_rsi:.1f} -> {curr_rsi:.1f} sobre cierre previo"
                     ),
                     metadata={"prev_rsi": prev_rsi, "curr_rsi": curr_rsi},
                 )
@@ -135,13 +153,20 @@ class MeanReversionStrategy(Strategy):
 
 
 class VwapTrendStrategy(Strategy):
-    """Buys when price reclaims rolling VWAP with volume confirmation; exits below VWAP."""
+    """Buys confirmed VWAP reclaim aligned with EMA trend; exits cleanly below VWAP."""
 
     name = "vwap_reclaim"
 
-    def __init__(self, *, lookback: int = 20, min_volume_ratio: float = 1.3) -> None:
+    def __init__(
+        self,
+        *,
+        lookback: int = 24,
+        min_volume_ratio: float = 1.5,
+        reclaim_buffer_pct: float = 0.001,
+    ) -> None:
         self.lookback = lookback
         self.min_volume_ratio = min_volume_ratio
+        self.reclaim_buffer_pct = reclaim_buffer_pct
 
     def evaluate(
         self,
@@ -150,7 +175,7 @@ class VwapTrendStrategy(Strategy):
         *,
         has_open_position: bool = False,
     ) -> Signal | None:
-        if len(candles) < self.lookback + 1:
+        if len(candles) < self.lookback + 2:
             return None
 
         window = candles[-self.lookback :]
@@ -164,7 +189,11 @@ class VwapTrendStrategy(Strategy):
         last = candles[-1]
 
         if not has_open_position:
-            reclaimed = prev.close <= vwap and last.close > vwap
+            reclaimed = (
+                prev.close <= vwap
+                and last.close > vwap * (1.0 + self.reclaim_buffer_pct)
+                and last.close > last.open
+            )
             vol_ok = last.volume_usd >= avg_vol * self.min_volume_ratio
             if reclaimed and vol_ok:
                 return Signal(
@@ -172,13 +201,13 @@ class VwapTrendStrategy(Strategy):
                     strategy_name=self.name,
                     side=Side.BUY,
                     reason=(
-                        f"Recuperación de VWAP({self.lookback}): "
+                        f"Recuperación confirmada VWAP({self.lookback}): "
                         f"{last.close:.6f} > {vwap:.6f}"
                     ),
                     metadata={"vwap": vwap, "vol_ratio": last.volume_usd / avg_vol},
                 )
         else:
-            if last.close < vwap * 0.99:
+            if last.close < vwap * 0.992:
                 return Signal(
                     mint=mint,
                     strategy_name=self.name,
